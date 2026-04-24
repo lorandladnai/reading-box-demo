@@ -6,6 +6,7 @@ export type WorkDto = {
   subjects: string[];
   editionId: string | null;
   references: Array<{ targetWorkId: string; targetTitle: string; relation: string }>;
+  citedBy: Array<{ sourceWorkId: string; sourceTitle: string; relation: string }>;
 };
 
 export type ReaderDto = {

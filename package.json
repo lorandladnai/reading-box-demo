@@ -9,7 +9,8 @@
     "lint": "eslint",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "import:gutenberg": "tsx scripts/import-gutenberg.ts"
+    "import:gutenberg": "tsx scripts/import-gutenberg.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

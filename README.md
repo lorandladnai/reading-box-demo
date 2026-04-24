@@ -38,6 +38,14 @@ You can import another id:
 npm run import:gutenberg -- 1342
 ```
 
+### Fast demo seed (recommended)
+
+Imports multiple books and adds reference edges so the graph is immediately useful.
+
+```bash
+npm run seed:demo
+```
+
 ## 3) Run app
 
 ```bash

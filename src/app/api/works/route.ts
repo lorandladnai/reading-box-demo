@@ -10,6 +10,7 @@ export async function GET() {
         include: { passages: { select: { id: true }, take: 1 } },
       },
       outgoing: { include: { targetWork: true } },
+      incoming: { include: { sourceWork: true } },
     },
     orderBy: { title: "asc" },
   });
@@ -25,6 +26,11 @@ export async function GET() {
       references: work.outgoing.map((r) => ({
         targetWorkId: r.targetWorkId,
         targetTitle: r.targetWork.title,
+        relation: r.relation,
+      })),
+      citedBy: work.incoming.map((r) => ({
+        sourceWorkId: r.sourceWorkId,
+        sourceTitle: r.sourceWork.title,
         relation: r.relation,
       })),
     })),

@@ -28,7 +28,7 @@ model Edition {
   sourceUrl      String
   language       String
   format         String
-  ingestVersion  String
+  ingestVersion  Int
   rawHtml        String?
   rawText        String?
   createdAt      DateTime     @default(now())

@@ -23,6 +23,9 @@ export function ReadingBoxApp() {
   const [trail, setTrail] = useState<Array<Record<string, unknown>>>([]);
   const [viewMode, setViewMode] = useState<"graph" | "list">("graph");
   const graphRef = useRef<SVGSVGElement | null>(null);
+  const graphNodeSelectionRef =
+    useRef<d3.Selection<SVGCircleElement, GraphNode, SVGGElement, unknown> | null>(null);
+  const passageRefs = useRef<Record<string, HTMLParagraphElement | null>>({});
 
   useEffect(() => {
     void fetch("/api/works")
@@ -103,8 +106,8 @@ export function ReadingBoxApp() {
       .data(nodes)
       .enter()
       .append("circle")
-      .attr("r", (d) => (selectedWorkId === d.id ? 12 : 9))
-      .attr("fill", (d) => (selectedWorkId === d.id ? "#b5935a" : "#8c877f"))
+      .attr("r", 9)
+      .attr("fill", "#8c877f")
       .style("cursor", "pointer")
       .call(
         d3
@@ -125,6 +128,7 @@ export function ReadingBoxApp() {
           }),
       )
       .on("click", (_, d) => setSelectedWorkId(d.id));
+    graphNodeSelectionRef.current = node;
 
     const labels = root
       .append("g")
@@ -149,8 +153,33 @@ export function ReadingBoxApp() {
 
     return () => {
       simulation.stop();
+      graphNodeSelectionRef.current = null;
     };
-  }, [works, graphEdges, viewMode, selectedWorkId]);
+  }, [works, graphEdges, viewMode]);
+
+  useEffect(() => {
+    if (!graphNodeSelectionRef.current) return;
+    graphNodeSelectionRef.current
+      .attr("r", (d) => (selectedWorkId === d.id ? 12 : 9))
+      .attr("fill", (d) => (selectedWorkId === d.id ? "#b5935a" : "#8c877f"));
+  }, [selectedWorkId]);
+
+  useEffect(() => {
+    if (!reader) return;
+    const lastPassageEvent = [...trail]
+      .reverse()
+      .find(
+        (event) =>
+          String(event.editionId ?? "") === reader.id &&
+          typeof event.passageId === "string" &&
+          event.passageId.length > 0,
+      );
+    if (!lastPassageEvent) return;
+    const passageId = String(lastPassageEvent.passageId);
+    const target = passageRefs.current[passageId];
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [reader, trail, selectedWorkId]);
 
   async function submitAnnotation() {
     if (!reader || !selectedPassageId || !selection || !annotationBody.trim()) return;
@@ -165,6 +194,12 @@ export function ReadingBoxApp() {
         endOffset: selection.end,
         body: annotationBody.trim(),
       }),
+    });
+    await postTrailEvent({
+      workId: reader.work.id,
+      editionId: reader.id,
+      passageId: selectedPassageId,
+      eventType: "ANNOTATE",
     });
     setAnnotationBody("");
     setSelection(null);
@@ -229,19 +264,27 @@ export function ReadingBoxApp() {
                         <h3 className="section-heading">{p.sectionKey}</h3>
                       )}
                       <p
+                        ref={(el) => {
+                          passageRefs.current[p.id] = el;
+                        }}
+                        data-passage-id={p.id}
                         onMouseUp={(event) => {
                           const el = event.currentTarget;
-                          const selected = window.getSelection()?.toString() ?? "";
-                          if (!selected.trim()) return;
-                          const start = el.textContent?.indexOf(selected) ?? -1;
-                          if (start < 0) return;
+                          const resolved = resolveSelectionOffsets(el);
+                          if (!resolved) return;
                           setSelectedPassageId(p.id);
-                          setSelection({ start, end: start + selected.length, exact: selected });
+                          setSelection(resolved);
+                          if (reader) {
+                            void postTrailEvent({
+                              workId: reader.work.id,
+                              editionId: reader.id,
+                              passageId: p.id,
+                              eventType: "OPEN_PASSAGE",
+                            }).then(() => refreshTrail());
+                          }
                         }}
                       >
-                        {selectedPassageId === p.id && selection
-                          ? `${p.text.slice(0, selection.start)}`
-                          : ""}
+                        {selectedPassageId === p.id && selection ? p.text.slice(0, selection.start) : ""}
                         {selectedPassageId === p.id && selection ? (
                           <>
                             <mark>{p.text.slice(selection.start, selection.end)}</mark>
@@ -307,6 +350,12 @@ export function ReadingBoxApp() {
                                       method: "PATCH",
                                       headers: { "Content-Type": "application/json" },
                                       body: JSON.stringify({ parentId: a.id, userName: "demo-user", body }),
+                                    });
+                                    await postTrailEvent({
+                                      workId: reader.work.id,
+                                      editionId: reader.id,
+                                      passageId: a.passageId,
+                                      eventType: "REPLY",
                                     });
                                     setReplyDrafts((prev) => ({ ...prev, [a.id]: "" }));
                                     setReader(await fetchReader(reader.id));
@@ -406,6 +455,15 @@ export function ReadingBoxApp() {
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ parentId: id, userName: "demo-user", body }),
                       });
+                      const editionId = String(a.editionId ?? "");
+                      const passageId = String(a.passageId ?? "");
+                      const workId = reader?.work.id ?? selectedWorkId ?? "";
+                      await postTrailEvent({
+                        workId,
+                        editionId,
+                        passageId,
+                        eventType: "REPLY",
+                      });
                       setGlobalReplyDrafts((prev) => ({ ...prev, [id]: "" }));
                       await refreshAnnotations();
                       if (reader) setReader(await fetchReader(reader.id));
@@ -433,6 +491,56 @@ export function ReadingBoxApp() {
     >;
     setTrail(json);
   }
+
+  async function postTrailEvent(input: {
+    workId: string;
+    editionId: string;
+    passageId?: string;
+    eventType: "OPEN_WORK" | "OPEN_PASSAGE" | "ANNOTATE" | "REPLY";
+  }) {
+    if (!input.workId || !input.editionId) return;
+    await fetch("/api/trail", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: "demo-user",
+        workId: input.workId,
+        editionId: input.editionId,
+        passageId: input.passageId ?? null,
+        eventType: input.eventType,
+        visibility: "PUBLIC",
+      }),
+    });
+  }
+}
+
+function resolveSelectionOffsets(
+  container: HTMLElement,
+): { start: number; end: number; exact: string } | null {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0);
+  const exact = range.toString().trim();
+  if (!exact) return null;
+  if (!container.contains(range.startContainer) || !container.contains(range.endContainer)) return null;
+  const start = getTextOffsetWithTreeWalker(container, range.startContainer, range.startOffset);
+  if (start < 0) return null;
+  return { start, end: start + exact.length, exact };
+}
+
+function getTextOffsetWithTreeWalker(
+  container: HTMLElement,
+  targetNode: Node,
+  targetOffset: number,
+): number {
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  let count = 0;
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (node === targetNode) return count + targetOffset;
+    count += node.textContent?.length ?? 0;
+  }
+  return -1;
 }
 
 async function fetchReader(editionId: string) {

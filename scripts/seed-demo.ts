@@ -4,8 +4,8 @@ import { importGutendexBook } from "../src/lib/ingest";
 const prisma = new PrismaClient();
 
 async function run() {
-  // A small, stable seed corpus suitable for immediate demo.
-  const ids = [2680, 1342, 4363]; // Meditations, Pride and Prejudice, Beyond Good and Evil
+  // Coherent philosophy-focused seed corpus.
+  const ids = [2680, 4363, 45109]; // Meditations, Beyond Good and Evil, Enchiridion
   const workIds: string[] = [];
 
   for (const id of ids) {
@@ -32,16 +32,31 @@ async function run() {
     await prisma.reference.upsert({
       where: {
         sourceWorkId_targetWorkId_relation: {
-          sourceWorkId: workIds[0],
-          targetWorkId: workIds[1],
-          relation: "contrast",
+          sourceWorkId: workIds[2],
+          targetWorkId: workIds[0],
+          relation: "commentary",
         },
       },
       update: {},
       create: {
-        sourceWorkId: workIds[0],
-        targetWorkId: workIds[1],
-        relation: "contrast",
+        sourceWorkId: workIds[2],
+        targetWorkId: workIds[0],
+        relation: "commentary",
+      },
+    });
+    await prisma.reference.upsert({
+      where: {
+        sourceWorkId_targetWorkId_relation: {
+          sourceWorkId: workIds[1],
+          targetWorkId: workIds[0],
+          relation: "response",
+        },
+      },
+      update: {},
+      create: {
+        sourceWorkId: workIds[1],
+        targetWorkId: workIds[0],
+        relation: "response",
       },
     });
   }

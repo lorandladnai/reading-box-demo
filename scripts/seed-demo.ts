@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 async function run() {
   // Coherent philosophy-focused seed corpus.
-  const ids = [2680, 4363, 45109]; // Meditations, Beyond Good and Evil, Enchiridion
+  const ids = [2680, 4363, 4399]; // Meditations, Beyond Good and Evil, Enchiridion (Epictetus)
   const workIds: string[] = [];
 
   for (const id of ids) {

@@ -22,10 +22,16 @@ export function ReadingBoxApp() {
   const [globalAnnotations, setGlobalAnnotations] = useState<Array<Record<string, unknown>>>([]);
   const [trail, setTrail] = useState<Array<Record<string, unknown>>>([]);
   const [viewMode, setViewMode] = useState<"graph" | "list">("graph");
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const graphRef = useRef<SVGSVGElement | null>(null);
   const graphNodeSelectionRef =
     useRef<d3.Selection<SVGCircleElement, GraphNode, SVGGElement, unknown> | null>(null);
   const passageRefs = useRef<Record<string, HTMLParagraphElement | null>>({});
+
+  // Sync theme onto <html> so CSS vars respond
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     void fetch("/api/works")
@@ -225,6 +231,13 @@ export function ReadingBoxApp() {
             Annotations
           </button>
         </nav>
+        <button
+          className="theme-toggle"
+          aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+        >
+          {theme === "dark" ? "☀ Light" : "☾ Dark"}
+        </button>
       </header>
 
       {tab === "corpus" && (
@@ -252,124 +265,130 @@ export function ReadingBoxApp() {
           </aside>
           <section className="reader">
             {!reader ? (
-              <div className="empty">Válassz művet a corpusból.</div>
+              <div className="empty">Select a work from the corpus to begin reading.</div>
             ) : (
               <>
                 <h1>{reader.work.title}</h1>
                 <p className="authors">{reader.work.authors.join(", ")}</p>
                 <div className="passages">
-                  {reader.passages.map((p, idx) => (
-                    <article key={p.id}>
-                      {(idx === 0 || reader.passages[idx - 1]?.sectionKey !== p.sectionKey) && (
-                        <h3 className="section-heading">{p.sectionKey}</h3>
-                      )}
-                      <p
-                        ref={(el) => {
-                          passageRefs.current[p.id] = el;
-                        }}
-                        data-passage-id={p.id}
-                        onMouseUp={(event) => {
-                          const el = event.currentTarget;
-                          const resolved = resolveSelectionOffsets(el);
-                          if (!resolved) return;
-                          setSelectedPassageId(p.id);
-                          setSelection(resolved);
-                          if (reader) {
-                            void postTrailEvent({
-                              workId: reader.work.id,
-                              editionId: reader.id,
-                              passageId: p.id,
-                              eventType: "OPEN_PASSAGE",
-                            }).then(() => refreshTrail());
-                          }
-                        }}
-                      >
-                        {selectedPassageId === p.id && selection ? p.text.slice(0, selection.start) : ""}
-                        {selectedPassageId === p.id && selection ? (
-                          <>
-                            <mark>{p.text.slice(selection.start, selection.end)}</mark>
-                            {p.text.slice(selection.end)}
-                          </>
-                        ) : (
-                          p.text
+                  {reader.passages.length === 0 ? (
+                    <p className="passages-empty">
+                      No passages found for this edition. The import may have failed — re-run the seed script.
+                    </p>
+                  ) : (
+                    reader.passages.map((p, idx) => (
+                      <article key={p.id}>
+                        {(idx === 0 || reader.passages[idx - 1]?.sectionKey !== p.sectionKey) && (
+                          <h3 className="section-heading">{p.sectionKey}</h3>
                         )}
-                      </p>
-                      {selectedPassageId === p.id && selection && (
-                        <div className="compose-inline">
-                          <div className="compose-quote">&quot;{selection.exact}&quot;</div>
-                          <textarea
-                            value={annotationBody}
-                            placeholder="Open a thread on this selected passage..."
-                            onChange={(e) => setAnnotationBody(e.target.value)}
-                          />
-                          <button onClick={() => void submitAnnotation()}>Create annotation</button>
-                        </div>
-                      )}
-                      {reader.annotations
-                        .filter((a) => a.passageId === p.id)
-                        .map((a) => (
-                          <div key={a.id} className="annotation">
-                            <div className="annotation-head">
-                              <b>{a.userName}</b> · {a.state}
+                        <p
+                          ref={(el) => {
+                            passageRefs.current[p.id] = el;
+                          }}
+                          data-passage-id={p.id}
+                          onMouseUp={(event) => {
+                            const el = event.currentTarget;
+                            const resolved = resolveSelectionOffsets(el);
+                            if (!resolved) return;
+                            setSelectedPassageId(p.id);
+                            setSelection(resolved);
+                            if (reader) {
+                              void postTrailEvent({
+                                workId: reader.work.id,
+                                editionId: reader.id,
+                                passageId: p.id,
+                                eventType: "OPEN_PASSAGE",
+                              }).then(() => refreshTrail());
+                            }
+                          }}
+                        >
+                          {selectedPassageId === p.id && selection ? p.text.slice(0, selection.start) : ""}
+                          {selectedPassageId === p.id && selection ? (
+                            <>
+                              <mark>{p.text.slice(selection.start, selection.end)}</mark>
+                              {p.text.slice(selection.end)}
+                            </>
+                          ) : (
+                            p.text
+                          )}
+                        </p>
+                        {selectedPassageId === p.id && selection && (
+                          <div className="compose-inline">
+                            <div className="compose-quote">&quot;{selection.exact}&quot;</div>
+                            <textarea
+                              value={annotationBody}
+                              placeholder="Open a thread on this selected passage..."
+                              onChange={(e) => setAnnotationBody(e.target.value)}
+                            />
+                            <button onClick={() => void submitAnnotation()}>Create annotation</button>
+                          </div>
+                        )}
+                        {reader.annotations
+                          .filter((a) => a.passageId === p.id)
+                          .map((a) => (
+                            <div key={a.id} className="annotation">
+                              <div className="annotation-head">
+                                <b>{a.userName}</b> · {a.state}
+                                {a.state === "OPEN" && (
+                                  <button
+                                    onClick={async () => {
+                                      await fetch("/api/annotations", {
+                                        method: "PATCH",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ action: "close", id: a.id }),
+                                      });
+                                      setReader(await fetchReader(reader.id));
+                                      await refreshAnnotations();
+                                    }}
+                                  >
+                                    close
+                                  </button>
+                                )}
+                              </div>
+                              <div>{a.body}</div>
+                              {a.replies.map((r) => (
+                                <div className="reply" key={r.id}>
+                                  {r.userName}: {r.body}
+                                </div>
+                              ))}
                               {a.state === "OPEN" && (
-                                <button
-                                  onClick={async () => {
-                                    await fetch("/api/annotations", {
-                                      method: "PATCH",
-                                      headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ action: "close", id: a.id }),
-                                    });
-                                    setReader(await fetchReader(reader.id));
-                                    await refreshAnnotations();
-                                  }}
-                                >
-                                  close
-                                </button>
+                                <div className="reply-compose">
+                                  <input
+                                    value={replyDrafts[a.id] ?? ""}
+                                    placeholder="Reply in thread..."
+                                    onChange={(e) =>
+                                      setReplyDrafts((prev) => ({ ...prev, [a.id]: e.target.value }))
+                                    }
+                                  />
+                                  <button
+                                    onClick={async () => {
+                                      const body = (replyDrafts[a.id] ?? "").trim();
+                                      if (!body) return;
+                                      await fetch("/api/annotations", {
+                                        method: "PATCH",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ parentId: a.id, userName: "demo-user", body }),
+                                      });
+                                      await postTrailEvent({
+                                        workId: reader.work.id,
+                                        editionId: reader.id,
+                                        passageId: a.passageId,
+                                        eventType: "REPLY",
+                                      });
+                                      setReplyDrafts((prev) => ({ ...prev, [a.id]: "" }));
+                                      setReader(await fetchReader(reader.id));
+                                      await refreshAnnotations();
+                                    }}
+                                  >
+                                    reply
+                                  </button>
+                                </div>
                               )}
                             </div>
-                            <div>{a.body}</div>
-                            {a.replies.map((r) => (
-                              <div className="reply" key={r.id}>
-                                {r.userName}: {r.body}
-                              </div>
-                            ))}
-                            {a.state === "OPEN" && (
-                              <div className="reply-compose">
-                                <input
-                                  value={replyDrafts[a.id] ?? ""}
-                                  placeholder="Reply in thread..."
-                                  onChange={(e) =>
-                                    setReplyDrafts((prev) => ({ ...prev, [a.id]: e.target.value }))
-                                  }
-                                />
-                                <button
-                                  onClick={async () => {
-                                    const body = (replyDrafts[a.id] ?? "").trim();
-                                    if (!body) return;
-                                    await fetch("/api/annotations", {
-                                      method: "PATCH",
-                                      headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ parentId: a.id, userName: "demo-user", body }),
-                                    });
-                                    await postTrailEvent({
-                                      workId: reader.work.id,
-                                      editionId: reader.id,
-                                      passageId: a.passageId,
-                                      eventType: "REPLY",
-                                    });
-                                    setReplyDrafts((prev) => ({ ...prev, [a.id]: "" }));
-                                    setReader(await fetchReader(reader.id));
-                                    await refreshAnnotations();
-                                  }}
-                                >
-                                  reply
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                    </article>
-                  ))}
+                          ))}
+                      </article>
+                    ))
+                  )}
                 </div>
               </>
             )}
@@ -405,76 +424,85 @@ export function ReadingBoxApp() {
       {tab === "trail" && (
         <main className="trail">
           <h2>My Trail</h2>
-          {trail.map((event, idx) => (
-            <button
-              key={idx}
-              className="trail-item"
-              onClick={() => {
-                const workId = String(event.workId ?? "");
-                if (!workId) return;
-                setTab("corpus");
-                setSelectedWorkId(workId);
-              }}
-            >
-              {(event.work as { title?: string })?.title ?? "Unknown work"} ·{" "}
-              {String(event.eventType ?? "")}
-            </button>
-          ))}
+          {trail.length === 0 ? (
+            <p className="passages-empty">No trail yet — open a work to begin.</p>
+          ) : (
+            trail.map((event, idx) => (
+              <button
+                key={idx}
+                className="trail-item"
+                onClick={() => {
+                  const workId = String(event.workId ?? "");
+                  if (!workId) return;
+                  setTab("corpus");
+                  setSelectedWorkId(workId);
+                }}
+              >
+                {(event.work as { title?: string })?.title ?? "Unknown work"} ·{" "}
+                {String(event.eventType ?? "")}
+              </button>
+            ))
+          )}
         </main>
       )}
 
       {tab === "annotations" && (
         <main className="annotations">
           <h2>Global Annotations</h2>
-          {globalAnnotations.map((a, idx) => (
-            <div className="annotation-card" key={idx}>
-              <div>
-                <strong>{String(a.userName ?? "")}</strong> · {String(a.state ?? "")}
-              </div>
-              <div>{String(a.body ?? "")}</div>
-              <div>replies: {Array.isArray(a.replies) ? a.replies.length : 0}</div>
-              {String(a.state ?? "") === "OPEN" && (
-                <div className="reply-compose">
-                  <input
-                    value={globalReplyDrafts[String(a.id ?? "")] ?? ""}
-                    placeholder="Reply from global view..."
-                    onChange={(e) =>
-                      setGlobalReplyDrafts((prev) => ({
-                        ...prev,
-                        [String(a.id ?? "")]: e.target.value,
-                      }))
-                    }
-                  />
-                  <button
-                    onClick={async () => {
-                      const id = String(a.id ?? "");
-                      const body = (globalReplyDrafts[id] ?? "").trim();
-                      if (!id || !body) return;
-                      await fetch("/api/annotations", {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ parentId: id, userName: "demo-user", body }),
-                      });
-                      const editionId = String(a.editionId ?? "");
-                      const passageId = String(a.passageId ?? "");
-                      const workId = reader?.work.id ?? selectedWorkId ?? "";
-                      await postTrailEvent({
-                        workId,
-                        editionId,
-                        passageId,
-                        eventType: "REPLY",
-                      });
-                      setGlobalReplyDrafts((prev) => ({ ...prev, [id]: "" }));
-                      await refreshAnnotations();
-                      if (reader) setReader(await fetchReader(reader.id));
-                    }}
-                  >
-                    reply
-                  </button>
+          {globalAnnotations.length === 0 ? (
+            <p className="passages-empty">No annotations yet — highlight a passage in a work to start a thread.</p>
+          ) : (
+            globalAnnotations.map((a, idx) => (
+              <div className="annotation-card" key={idx}>
+                <div>
+                  <strong>{String(a.userName ?? "")}</strong> · {String(a.state ?? "")}
                 </div>
-              )}
-            </div>
-          ))}
+                <div>{String(a.body ?? "")}</div>
+                <div>replies: {Array.isArray(a.replies) ? a.replies.length : 0}</div>
+                {String(a.state ?? "") === "OPEN" && (
+                  <div className="reply-compose">
+                    <input
+                      value={globalReplyDrafts[String(a.id ?? "")] ?? ""}
+                      placeholder="Reply from global view..."
+                      onChange={(e) =>
+                        setGlobalReplyDrafts((prev) => ({
+                          ...prev,
+                          [String(a.id ?? "")]: e.target.value,
+                        }))
+                      }
+                    />
+                    <button
+                      onClick={async () => {
+                        const id = String(a.id ?? "");
+                        const body = (globalReplyDrafts[id] ?? "").trim();
+                        if (!id || !body) return;
+                        await fetch("/api/annotations", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ parentId: id, userName: "demo-user", body }),
+                        });
+                        // workId is now served directly from the annotation DTO
+                        const workId = String(a.workId ?? "");
+                        const editionId = String(a.editionId ?? "");
+                        const passageId = String(a.passageId ?? "");
+                        await postTrailEvent({
+                          workId,
+                          editionId,
+                          passageId,
+                          eventType: "REPLY",
+                        });
+                        setGlobalReplyDrafts((prev) => ({ ...prev, [id]: "" }));
+                        await refreshAnnotations();
+                        if (reader) setReader(await fetchReader(reader.id));
+                      }}
+                    >
+                      reply
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </main>
       )}
     </div>

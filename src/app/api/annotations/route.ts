@@ -22,6 +22,7 @@ export async function GET() {
 
   const withAttention = annotations.map((a) => ({
     ...a,
+    workId: a.edition.workId,
     attention: a.replies.length + 1,
   }));
 

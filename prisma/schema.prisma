@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Work {
+  id         String      @id @default(cuid())
+  slug       String      @unique
+  title      String
+  authors    String[]
+  subjects   String[]
+  createdAt  DateTime    @default(now())
+  editions   Edition[]
+  outgoing   Reference[] @relation("SourceWork")
+  incoming   Reference[] @relation("TargetWork")
+  trailEvents TrailEvent[]
+}
+
+model Edition {
+  id            String       @id @default(cuid())
+  workId         String
+  source         String
+  sourceId       String
+  sourceUrl      String
+  language       String
+  format         String
+  ingestVersion  String
+  rawHtml        String?
+  rawText        String?
+  createdAt      DateTime     @default(now())
+  work           Work         @relation(fields: [workId], references: [id], onDelete: Cascade)
+  passages       Passage[]
+  annotations    Annotation[]
+  trailEvents    TrailEvent[]
+
+  @@index([workId])
+}
+
+model Passage {
+  id           String       @id @default(cuid())
+  editionId    String
+  sectionKey   String
+  passageIndex Int
+  text         String
+  html         String?
+  charStart    Int
+  charEnd      Int
+  edition      Edition      @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  annotations  Annotation[]
+  trailEvents  TrailEvent[]
+
+  @@index([editionId, passageIndex])
+}
+
+model Annotation {
+  id          String       @id @default(cuid())
+  editionId   String
+  passageId   String
+  userName    String
+  exact       String
+  prefix      String?
+  suffix      String?
+  startOffset Int
+  endOffset   Int
+  body        String
+  state       ThreadState  @default(OPEN)
+  parentId    String?
+  createdAt   DateTime     @default(now())
+  edition     Edition      @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  passage     Passage      @relation(fields: [passageId], references: [id], onDelete: Cascade)
+  parent      Annotation?  @relation("ThreadReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies     Annotation[] @relation("ThreadReplies")
+
+  @@index([editionId, passageId, createdAt])
+  @@index([parentId])
+}
+
+model Reference {
+  id           String   @id @default(cuid())
+  sourceWorkId String
+  targetWorkId String
+  relation     String
+  sourceWork   Work     @relation("SourceWork", fields: [sourceWorkId], references: [id], onDelete: Cascade)
+  targetWork   Work     @relation("TargetWork", fields: [targetWorkId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceWorkId, targetWorkId, relation])
+}
+
+model TrailEvent {
+  id        String          @id @default(cuid())
+  userId    String
+  workId    String
+  editionId String
+  passageId String?
+  eventType TrailEventType
+  createdAt DateTime        @default(now())
+  visibility Visibility     @default(PUBLIC)
+  work      Work            @relation(fields: [workId], references: [id], onDelete: Cascade)
+  edition   Edition         @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  passage   Passage?        @relation(fields: [passageId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+}
+
+enum ThreadState {
+  OPEN
+  CLOSED
+}
+
+enum TrailEventType {
+  OPEN_WORK
+  OPEN_PASSAGE
+  ANNOTATE
+  REPLY
+}
+
+enum Visibility {
+  PUBLIC
+  PRIVATE
+}

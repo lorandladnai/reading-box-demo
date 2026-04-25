@@ -74,3 +74,9 @@ export type SelectionState = {
   end: number;
   exact: string;
 };
+
+// Public trail summary — which works have been visited by other readers
+export type PublicTrailDto = {
+  workId: string;
+  visitors: string[]; // unique userIds who visited this work publicly
+};

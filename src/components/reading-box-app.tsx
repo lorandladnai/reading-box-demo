@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { WorkDto, ReaderDto, AnnotationDto, TrailEventDto, SelectionState } from "@/lib/types";
+import type { WorkDto, ReaderDto, AnnotationDto, TrailEventDto, SelectionState, PublicTrailDto } from "@/lib/types";
 import { CorpusGraph } from "./CorpusGraph";
 import { CorpusList } from "./CorpusList";
 import { PassageReader } from "./PassageReader";
@@ -23,8 +23,18 @@ export function ReadingBoxApp() {
   const [globalReplyDrafts, setGlobalReplyDrafts] = useState<Record<string, string>>({});
   const [globalAnnotations, setGlobalAnnotations] = useState<AnnotationDto[]>([]);
   const [trail, setTrail] = useState<TrailEventDto[]>([]);
+  const [publicTrail, setPublicTrail] = useState<PublicTrailDto[]>([]);
   const [viewMode, setViewMode] = useState<"graph" | "list">("graph");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  // Reader identity — persisted in sessionStorage
+  const [userId, setUserId] = useState<string>(() => {
+    if (typeof window === "undefined") return "reader-1";
+    return sessionStorage.getItem("rb-user") ?? "reader-1";
+  });
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+
   const passageRefs = useRef<Record<string, HTMLParagraphElement | null>>({});
 
   // Sync theme onto <html> so CSS vars respond
@@ -38,6 +48,7 @@ export function ReadingBoxApp() {
       .then((json: WorkDto[]) => setWorks(json));
     void refreshAnnotations();
     void refreshTrail();
+    void refreshPublicTrail();
   }, []);
 
   useEffect(() => {
@@ -49,13 +60,13 @@ export function ReadingBoxApp() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        userId: "demo-user",
+        userId,
         workId: work.id,
         editionId: work.editionId,
         eventType: "OPEN_WORK",
         visibility: "PUBLIC",
       }),
-    }).then(() => refreshTrail());
+    }).then(() => { void refreshTrail(); void refreshPublicTrail(); });
   }, [selectedWorkId, works]);
 
   // Unused but keep useMemo for future graph edge use
@@ -97,7 +108,7 @@ export function ReadingBoxApp() {
         editionId: reader.id,
         passageId,
         eventType: "OPEN_PASSAGE",
-      }).then(() => refreshTrail());
+      }).then(() => { void refreshTrail(); void refreshPublicTrail(); });
     }
   }
 
@@ -109,7 +120,7 @@ export function ReadingBoxApp() {
       body: JSON.stringify({
         editionId: reader.id,
         passageId: selectedPassageId,
-        userName: "demo-user",
+        userName: userId,
         startOffset: selection.start,
         endOffset: selection.end,
         body: annotationBody.trim(),
@@ -125,6 +136,7 @@ export function ReadingBoxApp() {
     setSelection(null);
     setReader(await fetchReader(reader.id));
     await refreshAnnotations();
+    await refreshPublicTrail();
   }
 
   async function handleCloseAnnotation(id: string) {
@@ -143,7 +155,7 @@ export function ReadingBoxApp() {
     await fetch("/api/annotations", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ parentId: annotationId, userName: "demo-user", body }),
+      body: JSON.stringify({ parentId: annotationId, userName: userId, body }),
     });
     const annotation = reader.annotations.find((a) => a.id === annotationId);
     if (annotation) {
@@ -157,6 +169,7 @@ export function ReadingBoxApp() {
     setReplyDrafts((prev) => ({ ...prev, [annotationId]: "" }));
     setReader(await fetchReader(reader.id));
     await refreshAnnotations();
+    await refreshPublicTrail();
   }
 
   async function handleSubmitGlobalReply(annotationId: string) {
@@ -165,7 +178,7 @@ export function ReadingBoxApp() {
     await fetch("/api/annotations", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ parentId: annotationId, userName: "demo-user", body }),
+      body: JSON.stringify({ parentId: annotationId, userName: userId, body }),
     });
     const annotation = globalAnnotations.find((a) => a.id === annotationId);
     if (annotation) {
@@ -179,11 +192,19 @@ export function ReadingBoxApp() {
     setGlobalReplyDrafts((prev) => ({ ...prev, [annotationId]: "" }));
     await refreshAnnotations();
     if (reader) setReader(await fetchReader(reader.id));
+    await refreshPublicTrail();
   }
 
   function handleSelectWork(workId: string) {
     setSelectedWorkId(workId);
     setTab("corpus");
+  }
+
+  function handleConfirmName() {
+    const name = nameDraft.trim() || userId;
+    setUserId(name);
+    sessionStorage.setItem("rb-user", name);
+    setEditingName(false);
   }
 
   // ── Render ─────────────────────────────────────────────────────
@@ -206,6 +227,30 @@ export function ReadingBoxApp() {
             Annotations
           </button>
         </nav>
+
+        {editingName ? (
+          <input
+            className="nameplate-input"
+            autoFocus
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleConfirmName();
+              if (e.key === "Escape") setEditingName(false);
+            }}
+            onBlur={handleConfirmName}
+            aria-label="Set reader name"
+          />
+        ) : (
+          <button
+            className="nameplate"
+            onClick={() => { setNameDraft(userId); setEditingName(true); }}
+            title="Click to change your reader name"
+          >
+            ✦ {userId}
+          </button>
+        )}
+
         <button
           className="theme-toggle"
           aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
@@ -232,6 +277,7 @@ export function ReadingBoxApp() {
                 works={works}
                 selectedWorkId={selectedWorkId}
                 onSelect={setSelectedWorkId}
+                publicTrail={publicTrail}
               />
             )}
           </aside>
@@ -286,8 +332,13 @@ export function ReadingBoxApp() {
   }
 
   async function refreshTrail() {
-    const json = await fetch("/api/trail?userId=demo-user").then((r) => r.json()) as TrailEventDto[];
+    const json = await fetch(`/api/trail?userId=${userId}`).then((r) => r.json()) as TrailEventDto[];
     setTrail(json);
+  }
+
+  async function refreshPublicTrail() {
+    const json = await fetch("/api/trail?public=1").then((r) => r.json()) as PublicTrailDto[];
+    setPublicTrail(json);
   }
 
   async function postTrailEvent(input: {
@@ -301,7 +352,7 @@ export function ReadingBoxApp() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        userId: "demo-user",
+        userId,
         workId: input.workId,
         editionId: input.editionId,
         passageId: input.passageId ?? null,

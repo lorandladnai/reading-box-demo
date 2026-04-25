@@ -1,16 +1,20 @@
 "use client";
 
 import * as d3 from "d3";
-import { useEffect, useRef } from "react";
-import type { WorkDto } from "@/lib/types";
+import { useEffect, useMemo, useRef } from "react";
+import type { WorkDto, PublicTrailDto } from "@/lib/types";
 
 type GraphNode = d3.SimulationNodeDatum & WorkDto;
 type GraphLink = d3.SimulationLinkDatum<GraphNode>;
+
+const NODE_R = 9;
+const NODE_R_SELECTED = 12;
 
 interface Props {
   works: WorkDto[];
   selectedWorkId: string | null;
   onSelect: (id: string) => void;
+  publicTrail: PublicTrailDto[];
 }
 
 /** After simulation resolves links, source/target become GraphNode objects. */
@@ -23,10 +27,19 @@ function nodeY(endpoint: string | number | GraphNode): number {
   return 0;
 }
 
-export function CorpusGraph({ works, selectedWorkId, onSelect }: Props) {
+export function CorpusGraph({ works, selectedWorkId, onSelect, publicTrail }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const nodeSelRef =
     useRef<d3.Selection<SVGCircleElement, GraphNode, SVGGElement, unknown> | null>(null);
+  const haloSelRef =
+    useRef<d3.Selection<SVGCircleElement, GraphNode, SVGGElement, unknown> | null>(null);
+
+  // Map workId → visitor count for halo sizing
+  const visitorMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of publicTrail) m.set(t.workId, t.visitors.length);
+    return m;
+  }, [publicTrail]);
 
   useEffect(() => {
     if (!svgRef.current || works.length === 0) return;
@@ -74,13 +87,32 @@ export function CorpusGraph({ works, selectedWorkId, onSelect }: Props) {
       .attr("stroke", "#45413a")
       .attr("stroke-width", 1.2);
 
+    // Halo rings — rendered before node circles so they sit behind
+    const halo = root
+      .append("g")
+      .selectAll<SVGCircleElement, GraphNode>("circle")
+      .data(nodes)
+      .enter()
+      .append("circle")
+      .attr("r", (d) => {
+        const count = visitorMap.get(d.id) ?? 0;
+        return count > 0 ? NODE_R + 5 + Math.min(count * 2, 10) : 0;
+      })
+      .attr("fill", "none")
+      .attr("stroke", "var(--color-accent)")
+      .attr("stroke-width", 1.5)
+      .attr("stroke-opacity", (d) => (visitorMap.get(d.id) ?? 0) > 0 ? 0.55 : 0)
+      .style("pointer-events", "none");
+
+    haloSelRef.current = halo;
+
     const node = root
       .append("g")
       .selectAll("circle")
       .data(nodes)
       .enter()
       .append("circle")
-      .attr("r", 9)
+      .attr("r", NODE_R)
       .attr("fill", "#8c877f")
       .style("cursor", "pointer")
       .call(
@@ -123,21 +155,37 @@ export function CorpusGraph({ works, selectedWorkId, onSelect }: Props) {
         .attr("x2", (d) => nodeX(d.target))
         .attr("y2", (d) => nodeY(d.target));
       node.attr("cx", (d) => d.x ?? 0).attr("cy", (d) => d.y ?? 0);
+      halo.attr("cx", (d) => d.x ?? 0).attr("cy", (d) => d.y ?? 0);
       labels.attr("x", (d) => d.x ?? 0).attr("y", (d) => (d.y ?? 0) + 22);
     });
 
     return () => {
       simulation.stop();
       nodeSelRef.current = null;
+      haloSelRef.current = null;
     };
-  }, [works, onSelect]);
+  }, [works, onSelect, visitorMap]);
 
+  // Update selected node appearance without re-running the full simulation
   useEffect(() => {
     if (!nodeSelRef.current) return;
     nodeSelRef.current
-      .attr("r", (d) => (selectedWorkId === d.id ? 12 : 9))
+      .attr("r", (d) => (selectedWorkId === d.id ? NODE_R_SELECTED : NODE_R))
       .attr("fill", (d) => (selectedWorkId === d.id ? "#b5935a" : "#8c877f"));
   }, [selectedWorkId]);
+
+  // Update halo radii when publicTrail changes without re-running simulation
+  useEffect(() => {
+    if (!haloSelRef.current) return;
+    haloSelRef.current
+      .attr("r", (d) => {
+        const count = visitorMap.get(d.id) ?? 0;
+        return count > 0 ? NODE_R + 5 + Math.min(count * 2, 10) : 0;
+      })
+      .attr("stroke-opacity", (d) =>
+        (visitorMap.get(d.id) ?? 0) > 0 ? 0.55 : 0,
+      );
+  }, [visitorMap]);
 
   return <svg ref={svgRef} viewBox="0 0 420 380" className="graph" />;
 }

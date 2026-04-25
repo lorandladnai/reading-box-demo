@@ -19,12 +19,6 @@ const TEXTS = [
   { id: 24777, label: "The Rosicrucian Cosmo-Conception — Heindel" },
   { id: 10112, label: "The Secret Symbols of the Rosicrucians" },
   { id: 1653,  label: "Theophrastus Paracelsus: Life & Writings — Hartmann" },
-  // ── Classical foundation texts ─────────────────────────────────
-  { id: 2680,  label: "Meditations — Marcus Aurelius" },
-  { id: 4080,  label: "The Enchiridion — Epictetus" },
-  // ── Renaissance natural philosophy ─────────────────────────────
-  { id: 14760, label: "The Advancement of Learning — Francis Bacon" },
-  { id: 59,    label: "Three Books of Occult Philosophy (excerpts) — Agrippa" },
 ] as const;
 
 async function run() {

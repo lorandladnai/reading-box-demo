@@ -1,11 +1,14 @@
 "use client";
 
 import * as d3 from "d3";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { WorkDto } from "@/lib/types";
 
 type GraphNode = d3.SimulationNodeDatum & WorkDto;
-type GraphLink = d3.SimulationLinkDatum<GraphNode>;
+type GraphLink = d3.SimulationLinkDatum<GraphNode> & {
+  source: string | GraphNode;
+  target: string | GraphNode;
+};
 
 interface Props {
   works: WorkDto[];
@@ -13,29 +16,29 @@ interface Props {
   onSelect: (id: string) => void;
 }
 
-/** After simulation resolves links, source/target become GraphNode objects. */
-function nodeX(endpoint: string | number | GraphNode): number {
-  if (typeof endpoint === "object" && "x" in endpoint) return endpoint.x ?? 0;
-  return 0;
-}
-function nodeY(endpoint: string | number | GraphNode): number {
-  if (typeof endpoint === "object" && "y" in endpoint) return endpoint.y ?? 0;
-  return 0;
-}
-
 export function CorpusGraph({ works, selectedWorkId, onSelect }: Props) {
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const nodeSelRef =
+  const graphRef = useRef<SVGSVGElement | null>(null);
+  const graphNodeSelectionRef =
     useRef<d3.Selection<SVGCircleElement, GraphNode, SVGGElement, unknown> | null>(null);
 
-  useEffect(() => {
-    if (!svgRef.current || works.length === 0) return;
+  const graphEdges = useMemo(
+    () =>
+      works.flatMap((w) =>
+        w.references.map((r) => ({
+          source: w.id,
+          target: r.targetWorkId,
+          relation: r.relation,
+        })),
+      ),
+    [works],
+  );
 
-    const svg = d3.select(svgRef.current);
+  useEffect(() => {
+    if (!graphRef.current || works.length === 0) return;
+    const svg = d3.select(graphRef.current);
     const width = 420;
     const height = 380;
     svg.selectAll("*").remove();
-
     const root = svg.append("g");
     svg.call(
       d3
@@ -46,11 +49,9 @@ export function CorpusGraph({ works, selectedWorkId, onSelect }: Props) {
 
     const nodes: GraphNode[] = works.map((w) => ({ ...w }));
     const nodeIds = new Set(nodes.map((n) => n.id));
-    const links: GraphLink[] = works
-      .flatMap((w) =>
-        w.references.map((r) => ({ source: w.id, target: r.targetWorkId }))
-      )
-      .filter((e) => nodeIds.has(e.source as string) && nodeIds.has(e.target as string));
+    const links: GraphLink[] = graphEdges
+      .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+      .map((e) => ({ source: e.source, target: e.target }));
 
     const simulation = d3
       .forceSimulation(nodes)
@@ -103,7 +104,7 @@ export function CorpusGraph({ works, selectedWorkId, onSelect }: Props) {
       )
       .on("click", (_, d) => onSelect(d.id));
 
-    nodeSelRef.current = node;
+    graphNodeSelectionRef.current = node;
 
     const labels = root
       .append("g")
@@ -118,26 +119,27 @@ export function CorpusGraph({ works, selectedWorkId, onSelect }: Props) {
 
     simulation.on("tick", () => {
       link
-        .attr("x1", (d) => nodeX(d.source))
-        .attr("y1", (d) => nodeY(d.source))
-        .attr("x2", (d) => nodeX(d.target))
-        .attr("y2", (d) => nodeY(d.target));
+        .attr("x1", (d) => ("x" in d.source ? (d.source as GraphNode).x ?? 0 : 0))
+        .attr("y1", (d) => ("y" in d.source ? (d.source as GraphNode).y ?? 0 : 0))
+        .attr("x2", (d) => ("x" in d.target ? (d.target as GraphNode).x ?? 0 : 0))
+        .attr("y2", (d) => ("y" in d.target ? (d.target as GraphNode).y ?? 0 : 0));
       node.attr("cx", (d) => d.x ?? 0).attr("cy", (d) => d.y ?? 0);
       labels.attr("x", (d) => d.x ?? 0).attr("y", (d) => (d.y ?? 0) + 22);
     });
 
     return () => {
       simulation.stop();
-      nodeSelRef.current = null;
+      graphNodeSelectionRef.current = null;
     };
-  }, [works, onSelect]);
+  }, [works, graphEdges]);
 
+  // Update node appearance when selection changes without rebuilding simulation
   useEffect(() => {
-    if (!nodeSelRef.current) return;
-    nodeSelRef.current
+    if (!graphNodeSelectionRef.current) return;
+    graphNodeSelectionRef.current
       .attr("r", (d) => (selectedWorkId === d.id ? 12 : 9))
       .attr("fill", (d) => (selectedWorkId === d.id ? "#b5935a" : "#8c877f"));
   }, [selectedWorkId]);
 
-  return <svg ref={svgRef} viewBox="0 0 420 380" className="graph" />;
+  return <svg ref={graphRef} viewBox="0 0 420 380" className="graph" />;
 }

@@ -1,96 +1,126 @@
-# Reading Box — Project Conventions
+# CLAUDE.md — Reading Box
 
-## Overview
-Communal co-reading web app. Users open works, select passages, annotate inline, reply in threads, and trace a reading trail. Built as a Next.js 15 App Router project with a Prisma/PostgreSQL backend and plain CSS.
+Project conventions for Claude Code sessions. **Always use the `Read` tool on local files. Never fetch URLs.**
 
-## Stack
-- **Framework**: Next.js 15 App Router (React Server Components + `"use client"` where needed)
-- **Language**: TypeScript strict mode
-- **Database**: PostgreSQL via Prisma ORM
-- **Styling**: Plain CSS in `src/app/globals.css` — no Tailwind, no CSS modules, no CSS-in-JS
-- **Graph**: D3 v7 (force simulation in `CorpusGraph.tsx`)
-- **Validation**: Zod (API routes only)
-- **Local model**: `qwen2.5-coder:14b` via Ollama + Claude Code
+---
+
+## Project Overview
+
+Reading Box is a communal co-reading web app. Users browse a corpus of literary works, read passages, highlight text, annotate, reply to threads, and trace their reading history.
+
+**Stack:** Next.js 15 App Router · TypeScript (strict) · Prisma ORM · PostgreSQL · D3 (force graph) · plain CSS with CSS custom properties
+
+---
 
 ## File Map
 
 | Path | Owns |
 |---|---|
-| `src/app/globals.css` | All design tokens + every component classname style |
-| `src/lib/types.ts` | All DTOs (`WorkDto`, `ReaderDto`, `PassageDto`, `InlineAnnotationDto`, `ReplyDto`, `AnnotationDto`, `TrailEventDto`, `SelectionState`) |
-| `src/components/reading-box-app.tsx` | Root state container — all `useState`, `useEffect`, async handlers; composes the six child components |
-| `src/components/CorpusGraph.tsx` | D3 force graph with drag + zoom + node highlight |
-| `src/components/CorpusList.tsx` | Flat list of works in the left sidebar |
-| `src/components/PassageReader.tsx` | Passage display, selection, inline annotation compose, thread replies; also owns `resolveSelectionOffsets` helpers |
-| `src/components/ContextPanel.tsx` | Right sidebar — references and cited-by for the selected work |
-| `src/components/TrailFeed.tsx` | Trail tab — ordered list of `TrailEventDto` |
-| `src/components/AnnotationsFeed.tsx` | Annotations tab — global sorted thread list with reply compose |
+| `src/app/globals.css` | All design tokens + every component's CSS. Single source of style truth. |
+| `src/components/reading-box-app.tsx` | Root state container. Composes child components. All `useState`/`useEffect`/`useRef` live here. |
+| `src/components/CorpusGraph.tsx` | D3 force-simulation graph of works + edges. |
+| `src/components/CorpusList.tsx` | Flat list of works for the left sidebar. |
+| `src/components/PassageReader.tsx` | Passage display, text selection, annotation compose, inline threads. Also owns `resolveSelectionOffsets` helper. |
+| `src/components/ContextPanel.tsx` | Right sidebar: references and cited-by for the selected work. |
+| `src/components/TrailFeed.tsx` | My Trail tab: ordered list of trail events. |
+| `src/components/AnnotationsFeed.tsx` | Annotations tab: global list of all annotations with reply compose. |
+| `src/lib/types.ts` | All DTOs. Single source of type truth. |
+| `prisma/schema.prisma` | Work, Edition, Passage, Annotation, Reference, TrailEvent models. |
 | `src/app/api/works/route.ts` | `GET /api/works` |
 | `src/app/api/reader/[editionId]/route.ts` | `GET /api/reader/:editionId` |
 | `src/app/api/annotations/route.ts` | `GET`, `POST`, `PATCH /api/annotations` |
 | `src/app/api/trail/route.ts` | `GET`, `POST /api/trail` |
 | `src/app/api/graph/route.ts` | `GET /api/graph` |
-| `prisma/schema.prisma` | `Work`, `Edition`, `Passage`, `Annotation`, `Reference`, `TrailEvent` models |
-| `scripts/` | Gutenberg importer + demo seed |
+| `scripts/` | Gutenberg importer and demo seed. |
+
+---
+
+## Types
+
+All DTOs live in `src/lib/types.ts`. Import from `@/lib/types` everywhere.
+
+| Type | Used for |
+|---|---|
+| `WorkDto` | Works list from `/api/works` |
+| `ReaderDto` | Edition + passages + annotations from `/api/reader/:id` |
+| `PassageDto` | `ReaderDto["passages"][number]` |
+| `InlineAnnotationDto` | `ReaderDto["annotations"][number]` |
+| `ReplyDto` | Replies within any annotation |
+| `AnnotationDto` | Global annotations from `/api/annotations` |
+| `TrailEventDto` | Trail events from `/api/trail` |
+| `SelectionState` | `{ start, end, exact }` text selection |
+
+**Never use `Record<string, unknown>` anywhere.** Always use a named DTO.
+
+---
 
 ## Conventions
 
-### Styling
-- All styles live in `src/app/globals.css`. One file, no exceptions.
-- Use CSS custom properties (`--color-*`, `--space-*`, `--text-*`, `--font-*`, `--radius-*`, `--shadow-*`, `--transition`) for every value. Never hardcode pixels, hex, or rem.
-- Classnames are plain strings — no `cn()`, no `clsx`, no conditional class utilities.
-- Dark/light mode via `[data-theme="dark"]` / `[data-theme="light"]` attribute on `<html>`. The toggle in the topbar sets this.
+### CSS
+- All styles live in `src/app/globals.css` using plain classnames.
+- No inline styles. No CSS modules. No styled-components. No Tailwind.
+- All classnames are plain strings — no `cn()`, no `clsx`.
+- Tokens: `--color-*`, `--space-*`, `--text-*`, `--font-display`, `--font-body`, `--radius-*`, `--shadow-*`, `--transition`.
+- Light/dark via `[data-theme]` attribute on `<html>`. Toggle sets `data-theme="light"` or `data-theme="dark"`.
 
 ### Components
-- State lives **only** in `ReadingBoxApp`. Child components receive typed props and emit typed callbacks.
+- `"use client"` only on files that use hooks or browser APIs.
+- State lives **only** in `ReadingBoxApp`. Child components receive typed props and emit callbacks.
 - No React Context, no Zustand, no Redux.
-- Add `"use client"` at the top of any file that uses hooks or browser APIs.
-- When adding a new component: create `src/components/MyComponent.tsx`, style its classnames in `globals.css`, import and compose it in `reading-box-app.tsx`.
+- Props interfaces are always named `Props` (local to the file) and typed with DTOs from `@/lib/types`.
 
-### Types
-- All DTOs live in `src/lib/types.ts`. No `Record<string, unknown>` anywhere in the codebase.
-- API route return shapes must match the exported DTO in `types.ts`.
-- When adding a new API route, add its DTO to `types.ts` first, then implement the route.
-
-### API Routes
-- Export named `GET` / `POST` / `PATCH` functions — never a default export.
-- Use Zod for input validation. Return `NextResponse.json()`.
-- Include the Prisma `include` joins needed to satisfy the DTO shape.
+### API routes
+- Export named `GET`/`POST`/`PATCH` functions.
+- Never return `Record<string, unknown>`. Always return a typed DTO object.
+- Add the corresponding DTO to `src/lib/types.ts` when adding a new route.
 
 ### Database
-- Prisma client singleton lives at `src/lib/db.ts` (imported as `db`).
-- To change schema: edit `prisma/schema.prisma`, then run `npx prisma migrate dev --name describe-change`.
-- Update affected API routes and `types.ts` after any schema change.
+- Prisma client singleton at `@/lib/prisma`.
+- After schema changes: `npx prisma migrate dev --name describe-change`.
+
+---
 
 ## Common Tasks
 
 ### Add a new component
 1. Create `src/components/MyComponent.tsx` with `"use client"` if it uses hooks.
-2. Define a typed `Props` interface using DTOs from `@/lib/types`.
-3. Add the component's classnames to `globals.css`.
-4. Import and render it in `reading-box-app.tsx`, passing state down as props.
+2. Define a `Props` interface using DTOs from `@/lib/types`.
+3. Add classnames to `globals.css` following the existing token pattern.
+4. Import and render from `reading-box-app.tsx`.
 
 ### Add a new API route
-1. Add the return DTO to `src/lib/types.ts`.
-2. Create `src/app/api/route-name/route.ts` with named exports.
-3. Validate input with Zod; use `db` from `@/lib/db`.
+1. Create `src/app/api/route-name/route.ts`.
+2. Export named `GET`/`POST`/`PATCH` handlers.
+3. Add the DTO to `src/lib/types.ts`.
 
-### Modify the schema
+### Modify the database schema
 1. Edit `prisma/schema.prisma`.
 2. `npx prisma migrate dev --name describe-change`
-3. Update `src/lib/types.ts` and any affected API route.
+3. Update affected API routes and DTOs.
+
+---
 
 ## Running Locally
+
 ```bash
-npx prisma migrate dev       # apply pending migrations
-npx ts-node scripts/seed-demo.ts  # seed Gutenberg demo data
-npm run dev                  # dev server → localhost:3000
+# Apply migrations
+npx prisma migrate dev
+
+# Seed Gutenberg demo data
+npx ts-node scripts/seed-demo.ts
+
+# Start dev server
+npm run dev          # http://localhost:3000
 ```
 
-## Do Not
-- Install Tailwind, shadcn, or any component library.
-- Use CSS modules, styled-components, or inline `style={{}}`.
-- Add state management libraries.
-- Use `Record<string, unknown>` anywhere — always define a proper type.
-- Fetch URLs from within a Claude Code session — use the `Read` tool on local files.
-- Move state out of `ReadingBoxApp` without explicit instruction.
+---
+
+## What NOT to Do
+
+- Do **not** install Tailwind, shadcn, or any component library.
+- Do **not** use CSS modules or styled-components.
+- Do **not** add state management libraries (no Zustand, Redux, Jotai).
+- Do **not** use `Record<string, unknown>` — always use a named DTO.
+- Do **not** move state out of `ReadingBoxApp` without explicit instruction.
+- Do **not** fetch URLs from within Claude Code — use the `Read` tool on local files.
+- Do **not** add `"use client"` to files that don't need it.

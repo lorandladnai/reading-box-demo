@@ -1,6 +1,11 @@
 "use client";
 
-import type { ReaderDto, SelectionState, PassageDto } from "@/lib/types";
+import type {
+  ReaderDto,
+  PassageDto,
+  InlineAnnotationDto,
+  SelectionState,
+} from "@/lib/types";
 import type { MutableRefObject } from "react";
 
 interface Props {
@@ -50,68 +55,68 @@ export function PassageReader({
       <div className="passages">
         {reader.passages.length === 0 ? (
           <p className="passages-empty">
-            No passages found for this edition. Re-run the import script for this book.
+            No passages found for this edition. The import may have failed — re-run the seed script.
           </p>
         ) : (
           reader.passages.map((p: PassageDto, idx: number) => (
             <article key={p.id}>
               {(idx === 0 || reader.passages[idx - 1]?.sectionKey !== p.sectionKey) && (
-                <h3 className="section-heading">{p.sectionKey.replace("sec-", "Section ")}</h3>
+                <h3 className="section-heading">{p.sectionKey}</h3>
               )}
               <p
-                ref={(el) => { passageRefs.current[p.id] = el; }}
+                ref={(el) => {
+                  passageRefs.current[p.id] = el;
+                }}
                 data-passage-id={p.id}
                 onMouseUp={(event) => {
-                  const resolved = resolveSelectionOffsets(event.currentTarget);
+                  const el = event.currentTarget;
+                  const resolved = resolveSelectionOffsets(el);
                   onPassageMouseUp(p.id, resolved);
                 }}
               >
                 {selectedPassageId === p.id && selection
-                  ? (
-                    <>
-                      {p.text.slice(0, selection.start)}
-                      <mark>{p.text.slice(selection.start, selection.end)}</mark>
-                      {p.text.slice(selection.end)}
-                    </>
-                  )
-                  : p.text
-                }
+                  ? p.text.slice(0, selection.start)
+                  : ""}
+                {selectedPassageId === p.id && selection ? (
+                  <>
+                    <mark>{p.text.slice(selection.start, selection.end)}</mark>
+                    {p.text.slice(selection.end)}
+                  </>
+                ) : (
+                  p.text
+                )}
               </p>
 
               {selectedPassageId === p.id && selection && (
                 <div className="compose-inline">
-                  <div className="compose-quote">&ldquo;{selection.exact}&rdquo;</div>
+                  <div className="compose-quote">&quot;{selection.exact}&quot;</div>
                   <textarea
                     value={annotationBody}
                     placeholder="Open a thread on this selected passage..."
                     onChange={(e) => onAnnotationBodyChange(e.target.value)}
                   />
-                  <button onClick={() => void onSubmitAnnotation()}>Create annotation</button>
+                  <button onClick={() => void onSubmitAnnotation()}>
+                    Create annotation
+                  </button>
                 </div>
               )}
 
               {reader.annotations
-                .filter((a) => a.passageId === p.id)
-                .map((a) => (
+                .filter((a: InlineAnnotationDto) => a.passageId === p.id)
+                .map((a: InlineAnnotationDto) => (
                   <div key={a.id} className="annotation">
                     <div className="annotation-head">
-                      <b>{a.userName}</b>
-                      <span className="annotation-state">{a.state === "OPEN" ? "open" : "closed"}</span>
+                      <b>{a.userName}</b> · {a.state}
                       {a.state === "OPEN" && (
-                        <button
-                          className="annotation-close"
-                          aria-label="Close annotation thread"
-                          title="Close thread"
-                          onClick={() => void onCloseAnnotation(a.id)}
-                        >
-                          &#x2715;
+                        <button onClick={() => void onCloseAnnotation(a.id)}>
+                          close
                         </button>
                       )}
                     </div>
-                    <div className="annotation-body">{a.body}</div>
+                    <div>{a.body}</div>
                     {a.replies.map((r) => (
                       <div className="reply" key={r.id}>
-                        <b>{r.userName}</b>: {r.body}
+                        {r.userName}: {r.body}
                       </div>
                     ))}
                     {a.state === "OPEN" && (
@@ -121,7 +126,9 @@ export function PassageReader({
                           placeholder="Reply in thread..."
                           onChange={(e) => onReplyDraftChange(a.id, e.target.value)}
                         />
-                        <button onClick={() => void onSubmitReply(a.id)}>reply</button>
+                        <button onClick={() => void onSubmitReply(a.id)}>
+                          reply
+                        </button>
                       </div>
                     )}
                   </div>
@@ -134,7 +141,9 @@ export function PassageReader({
   );
 }
 
-// ── Helpers ────────────────────────────────────────────────────
+// ----------------------------------------------------------------
+// Selection helpers (co-located with the component that uses them)
+// ----------------------------------------------------------------
 
 function resolveSelectionOffsets(
   container: HTMLElement,
@@ -147,7 +156,8 @@ function resolveSelectionOffsets(
   if (
     !container.contains(range.startContainer) ||
     !container.contains(range.endContainer)
-  ) return null;
+  )
+    return null;
   const start = getTextOffsetWithTreeWalker(
     container,
     range.startContainer,

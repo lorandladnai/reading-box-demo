@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { WorkDto, ReaderDto, AnnotationDto, TrailEventDto, SelectionState } from "@/lib/types";
+import { useEffect, useRef, useState } from "react";
+import type {
+  WorkDto,
+  ReaderDto,
+  AnnotationDto,
+  TrailEventDto,
+  SelectionState,
+} from "@/lib/types";
 import { CorpusGraph } from "./CorpusGraph";
 import { CorpusList } from "./CorpusList";
 import { PassageReader } from "./PassageReader";
@@ -58,17 +64,7 @@ export function ReadingBoxApp() {
     }).then(() => refreshTrail());
   }, [selectedWorkId, works]);
 
-  // Unused but keep useMemo for future graph edge use
-  const _graphEdges = useMemo(
-    () =>
-      works.flatMap((w) =>
-        w.references.map((r) => ({ source: w.id, target: r.targetWorkId, relation: r.relation }))
-      ),
-    [works]
-  );
-  void _graphEdges;
-
-  // Scroll to last visited passage when reader loads
+  // Scroll to last-read passage when reader loads
   useEffect(() => {
     if (!reader) return;
     const lastPassageEvent = [...trail]
@@ -79,29 +75,18 @@ export function ReadingBoxApp() {
           typeof event.passageId === "string" &&
           event.passageId.length > 0,
       );
-    if (!lastPassageEvent?.passageId) return;
-    const target = passageRefs.current[lastPassageEvent.passageId];
+    if (!lastPassageEvent) return;
+    const passageId = lastPassageEvent.passageId!;
+    const target = passageRefs.current[passageId];
     if (!target) return;
     target.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [reader, trail, selectedWorkId]);
 
-  // ── Handlers ──────────────────────────────────────────────────
+  // ----------------------------------------------------------------
+  // Annotation actions
+  // ----------------------------------------------------------------
 
-  function handlePassageMouseUp(passageId: string, resolved: SelectionState | null) {
-    if (!resolved) return;
-    setSelectedPassageId(passageId);
-    setSelection(resolved);
-    if (reader) {
-      void postTrailEvent({
-        workId: reader.work.id,
-        editionId: reader.id,
-        passageId,
-        eventType: "OPEN_PASSAGE",
-      }).then(() => refreshTrail());
-    }
-  }
-
-  async function handleSubmitAnnotation() {
+  async function submitAnnotation() {
     if (!reader || !selectedPassageId || !selection || !annotationBody.trim()) return;
     await fetch("/api/annotations", {
       method: "POST",
@@ -127,47 +112,47 @@ export function ReadingBoxApp() {
     await refreshAnnotations();
   }
 
-  async function handleCloseAnnotation(id: string) {
+  async function closeAnnotation(id: string) {
+    if (!reader) return;
     await fetch("/api/annotations", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "close", id }),
     });
-    if (reader) setReader(await fetchReader(reader.id));
+    setReader(await fetchReader(reader.id));
     await refreshAnnotations();
   }
 
-  async function handleSubmitReply(annotationId: string) {
+  async function submitInlineReply(annotationId: string) {
+    if (!reader) return;
     const body = (replyDrafts[annotationId] ?? "").trim();
-    if (!body || !reader) return;
+    if (!body) return;
+    const annotation = reader.annotations.find((a) => a.id === annotationId);
     await fetch("/api/annotations", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ parentId: annotationId, userName: "demo-user", body }),
     });
-    const annotation = reader.annotations.find((a) => a.id === annotationId);
-    if (annotation) {
-      await postTrailEvent({
-        workId: reader.work.id,
-        editionId: reader.id,
-        passageId: annotation.passageId,
-        eventType: "REPLY",
-      });
-    }
+    await postTrailEvent({
+      workId: reader.work.id,
+      editionId: reader.id,
+      passageId: annotation?.passageId,
+      eventType: "REPLY",
+    });
     setReplyDrafts((prev) => ({ ...prev, [annotationId]: "" }));
     setReader(await fetchReader(reader.id));
     await refreshAnnotations();
   }
 
-  async function handleSubmitGlobalReply(annotationId: string) {
-    const body = (globalReplyDrafts[annotationId] ?? "").trim();
-    if (!body) return;
+  async function submitGlobalReply(id: string) {
+    const body = (globalReplyDrafts[id] ?? "").trim();
+    if (!id || !body) return;
+    const annotation = globalAnnotations.find((a) => a.id === id);
     await fetch("/api/annotations", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ parentId: annotationId, userName: "demo-user", body }),
+      body: JSON.stringify({ parentId: id, userName: "demo-user", body }),
     });
-    const annotation = globalAnnotations.find((a) => a.id === annotationId);
     if (annotation) {
       await postTrailEvent({
         workId: annotation.workId,
@@ -176,27 +161,53 @@ export function ReadingBoxApp() {
         eventType: "REPLY",
       });
     }
-    setGlobalReplyDrafts((prev) => ({ ...prev, [annotationId]: "" }));
+    setGlobalReplyDrafts((prev) => ({ ...prev, [id]: "" }));
     await refreshAnnotations();
     if (reader) setReader(await fetchReader(reader.id));
   }
 
-  function handleSelectWork(workId: string) {
-    setSelectedWorkId(workId);
-    setTab("corpus");
+  function handlePassageMouseUp(passageId: string, resolved: SelectionState | null) {
+    if (!resolved) return;
+    setSelectedPassageId(passageId);
+    setSelection(resolved);
+    if (reader) {
+      void postTrailEvent({
+        workId: reader.work.id,
+        editionId: reader.id,
+        passageId,
+        eventType: "OPEN_PASSAGE",
+      }).then(() => refreshTrail());
+    }
   }
 
-  // ── Render ─────────────────────────────────────────────────────
+  function handleWorkSelect(id: string) {
+    setSelectedWorkId(id);
+  }
+
+  function handleTrailNavigate(workId: string) {
+    setTab("corpus");
+    setSelectedWorkId(workId);
+  }
+
+  // ----------------------------------------------------------------
+  // Render
+  // ----------------------------------------------------------------
 
   return (
     <div className="app">
       <header className="topbar">
         <div className="logo">Reading Box</div>
         <nav className="tabs">
-          <button className={tab === "corpus" ? "active" : ""} onClick={() => setTab("corpus")}>
+          <button
+            className={tab === "corpus" ? "active" : ""}
+            onClick={() => setTab("corpus")}
+          >
             Corpus
           </button>
-          <button className={tab === "trail" ? "active" : ""} onClick={() => setTab("trail")}>
+          <button
+            className={tab === "trail" ? "active" : ""}
+            onClick={() => setTab("trail")}
+          >
             My Trail
           </button>
           <button
@@ -226,12 +237,12 @@ export function ReadingBoxApp() {
               </div>
             </div>
             {viewMode === "list" ? (
-              <CorpusList works={works} onSelect={setSelectedWorkId} />
+              <CorpusList works={works} onSelect={handleWorkSelect} />
             ) : (
               <CorpusGraph
                 works={works}
                 selectedWorkId={selectedWorkId}
-                onSelect={setSelectedWorkId}
+                onSelect={handleWorkSelect}
               />
             )}
           </aside>
@@ -245,55 +256,61 @@ export function ReadingBoxApp() {
             passageRefs={passageRefs}
             onPassageMouseUp={handlePassageMouseUp}
             onAnnotationBodyChange={setAnnotationBody}
-            onSubmitAnnotation={handleSubmitAnnotation}
-            onCloseAnnotation={handleCloseAnnotation}
-            onReplyDraftChange={(id, val) =>
-              setReplyDrafts((prev) => ({ ...prev, [id]: val }))
+            onSubmitAnnotation={submitAnnotation}
+            onCloseAnnotation={closeAnnotation}
+            onReplyDraftChange={(annotationId, value) =>
+              setReplyDrafts((prev) => ({ ...prev, [annotationId]: value }))
             }
-            onSubmitReply={handleSubmitReply}
+            onSubmitReply={submitInlineReply}
           />
 
           <ContextPanel
             works={works}
             selectedWorkId={selectedWorkId}
-            onSelect={handleSelectWork}
+            onSelect={handleWorkSelect}
           />
         </main>
       )}
 
       {tab === "trail" && (
-        <TrailFeed trail={trail} onNavigate={handleSelectWork} />
+        <TrailFeed trail={trail} onNavigate={handleTrailNavigate} />
       )}
 
       {tab === "annotations" && (
         <AnnotationsFeed
           globalAnnotations={globalAnnotations}
           globalReplyDrafts={globalReplyDrafts}
-          onReplyDraftChange={(id, val) =>
-            setGlobalReplyDrafts((prev) => ({ ...prev, [id]: val }))
+          onReplyDraftChange={(id, value) =>
+            setGlobalReplyDrafts((prev) => ({ ...prev, [id]: value }))
           }
-          onSubmitGlobalReply={handleSubmitGlobalReply}
+          onSubmitGlobalReply={submitGlobalReply}
         />
       )}
     </div>
   );
 
-  // ── Private helpers ────────────────────────────────────────────
+  // ----------------------------------------------------------------
+  // Data helpers
+  // ----------------------------------------------------------------
 
   async function refreshAnnotations() {
-    const json = await fetch("/api/annotations").then((r) => r.json()) as AnnotationDto[];
+    const json = (await fetch("/api/annotations").then((r) =>
+      r.json(),
+    )) as AnnotationDto[];
     setGlobalAnnotations(json);
   }
 
   async function refreshTrail() {
-    const json = await fetch("/api/trail?userId=demo-user").then((r) => r.json()) as TrailEventDto[];
+    const json = (await fetch("/api/trail?userId=demo-user").then((r) =>
+      r.json(),
+    )) as TrailEventDto[];
     setTrail(json);
   }
 
   async function postTrailEvent(input: {
     workId: string;
     editionId: string;
-    passageId?: string;
+    passageId?: string | null;
     eventType: "OPEN_WORK" | "OPEN_PASSAGE" | "ANNOTATE" | "REPLY";
   }) {
     if (!input.workId || !input.editionId) return;

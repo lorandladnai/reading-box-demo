@@ -5,8 +5,8 @@ import type { AnnotationDto } from "@/lib/types";
 interface Props {
   globalAnnotations: AnnotationDto[];
   globalReplyDrafts: Record<string, string>;
-  onReplyDraftChange: (annotationId: string, value: string) => void;
-  onSubmitGlobalReply: (annotationId: string) => Promise<void>;
+  onReplyDraftChange: (id: string, value: string) => void;
+  onSubmitGlobalReply: (id: string) => Promise<void>;
 }
 
 export function AnnotationsFeed({
@@ -37,7 +37,9 @@ export function AnnotationsFeed({
                   placeholder="Reply from global view..."
                   onChange={(e) => onReplyDraftChange(a.id, e.target.value)}
                 />
-                <button onClick={() => void onSubmitGlobalReply(a.id)}>reply</button>
+                <button onClick={() => void onSubmitGlobalReply(a.id)}>
+                  reply
+                </button>
               </div>
             )}
           </div>

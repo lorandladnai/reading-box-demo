@@ -1,18 +1,7 @@
-// All DTOs for Reading Box. No Record<string, unknown> anywhere.
-// Shapes are derived directly from API route return values.
+// ----------------------------------------------------------------
+// Shared sub-types
+// ----------------------------------------------------------------
 
-export type WorkDto = {
-  id: string;
-  slug: string;
-  title: string;
-  authors: string[];
-  subjects: string[];
-  editionId: string | null;
-  references: Array<{ targetWorkId: string; targetTitle: string; relation: string }>;
-  citedBy: Array<{ sourceWorkId: string; sourceTitle: string; relation: string }>;
-};
-
-// Sub-types extracted from ReaderDto for component prop signatures
 export type ReplyDto = {
   id: string;
   body: string;
@@ -35,6 +24,27 @@ export type PassageDto = {
   sectionKey: string;
 };
 
+export type SelectionState = {
+  start: number;
+  end: number;
+  exact: string;
+};
+
+// ----------------------------------------------------------------
+// API DTOs
+// ----------------------------------------------------------------
+
+export type WorkDto = {
+  id: string;
+  slug: string;
+  title: string;
+  authors: string[];
+  subjects: string[];
+  editionId: string | null;
+  references: Array<{ targetWorkId: string; targetTitle: string; relation: string }>;
+  citedBy: Array<{ sourceWorkId: string; sourceTitle: string; relation: string }>;
+};
+
 export type ReaderDto = {
   id: string;
   work: { id: string; title: string; authors: string[] };
@@ -42,35 +52,24 @@ export type ReaderDto = {
   annotations: InlineAnnotationDto[];
 };
 
-// Derived from GET /api/annotations (includes replies + edition.work join)
 export type AnnotationDto = {
   id: string;
   body: string;
   state: "OPEN" | "CLOSED";
   passageId: string;
-  editionId: string;
-  workId: string;
   userName: string;
-  attention: number;
+  workId: string;
+  editionId: string;
   replies: ReplyDto[];
 };
 
-// Derived from GET /api/trail (includes work + passage joins)
 export type TrailEventDto = {
   id: string;
-  userId: string;
+  eventType: string;
   workId: string;
   editionId: string;
   passageId: string | null;
-  eventType: "OPEN_WORK" | "OPEN_PASSAGE" | "ANNOTATE" | "REPLY";
-  visibility: "PUBLIC" | "PRIVATE";
+  userId: string;
   createdAt: string;
-  work: { id: string; title: string };
-};
-
-// Shared selection state used in PassageReader
-export type SelectionState = {
-  start: number;
-  end: number;
-  exact: string;
+  work: { title: string };
 };

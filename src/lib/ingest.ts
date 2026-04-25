@@ -62,7 +62,7 @@ export async function importGutendexBook(prisma: PrismaClient, sourceId: number)
       sourceUrl,
       language: book.languages[0] ?? "en",
       format: htmlUrl ? "text/html" : "text/plain",
-      ingestVersion: 1,
+      ingestVersion: "1",
       rawHtml: htmlUrl ? cleaned : null,
       rawText: textUrl ? cleaned : null,
     },

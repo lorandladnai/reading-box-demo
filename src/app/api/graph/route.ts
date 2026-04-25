@@ -5,11 +5,32 @@ export async function GET() {
   const works = await db.work.findMany({
     include: {
       outgoing: true,
-      editions: { include: { annotations: true } },
+      incoming: true,
+      editions: {
+        include: {
+          annotations: { where: { parentId: null }, include: { replies: true } },
+        },
+      },
     },
   });
 
-  const corpusNodes = works.map((w) => ({ id: w.id, label: w.title, type: "work" }));
+  const corpusNodes = works.map((w) => {
+    const annotationCount = w.editions.reduce((sum, e) => sum + e.annotations.length, 0);
+    const replyCount = w.editions.reduce(
+      (sum, e) => sum + e.annotations.reduce((s, a) => s + a.replies.length, 0),
+      0,
+    );
+    return {
+      id: w.id,
+      label: w.title,
+      authors: w.authors,
+      type: "work",
+      degree: w.outgoing.length + w.incoming.length,
+      annotationCount,
+      attention: annotationCount + replyCount,
+    };
+  });
+
   const corpusEdges = works.flatMap((w) =>
     w.outgoing.map((r) => ({
       id: r.id,
@@ -27,6 +48,7 @@ export async function GET() {
         workId: w.id,
         state: a.state,
         parentId: a.parentId,
+        replyCount: a.replies.length,
       })),
     ),
   );

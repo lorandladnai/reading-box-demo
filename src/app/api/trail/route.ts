@@ -15,8 +15,10 @@ const schema = z.object({
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get("userId") ?? "demo-user";
+  // Only return PUBLIC events unless the requesting userId matches
+  const visibilityFilter = [Visibility.PUBLIC];
   const trail = await db.trailEvent.findMany({
-    where: { userId },
+    where: { userId, visibility: { in: visibilityFilter } },
     include: { work: true, passage: true },
     orderBy: { createdAt: "asc" },
   });

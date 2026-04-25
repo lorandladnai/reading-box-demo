@@ -98,3 +98,14 @@ export async function PATCH(req: Request) {
   });
   return NextResponse.json(reply, { status: 201 });
 }
+
+export async function DELETE(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+  const annotation = await db.annotation.findUnique({ where: { id } });
+  if (!annotation) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // Delete the whole thread if root, or just the reply
+  await db.annotation.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+}

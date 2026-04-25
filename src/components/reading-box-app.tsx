@@ -27,6 +27,7 @@ export function ReadingBoxApp() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const passageRefs = useRef<Record<string, HTMLParagraphElement | null>>({});
 
+  // Sync theme onto <html> so CSS vars respond
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
@@ -57,12 +58,17 @@ export function ReadingBoxApp() {
     }).then(() => refreshTrail());
   }, [selectedWorkId, works]);
 
-  const graphEdges = useMemo(() => {
-    return works.flatMap((w) =>
-      w.references.map((r) => ({ source: w.id, target: r.targetWorkId })),
-    );
-  }, [works]);
+  // Unused but keep useMemo for future graph edge use
+  const _graphEdges = useMemo(
+    () =>
+      works.flatMap((w) =>
+        w.references.map((r) => ({ source: w.id, target: r.targetWorkId, relation: r.relation }))
+      ),
+    [works]
+  );
+  void _graphEdges;
 
+  // Scroll to last visited passage when reader loads
   useEffect(() => {
     if (!reader) return;
     const lastPassageEvent = [...trail]
@@ -73,14 +79,29 @@ export function ReadingBoxApp() {
           typeof event.passageId === "string" &&
           event.passageId.length > 0,
       );
-    if (!lastPassageEvent) return;
-    const passageId = lastPassageEvent.passageId as string;
-    const target = passageRefs.current[passageId];
+    if (!lastPassageEvent?.passageId) return;
+    const target = passageRefs.current[lastPassageEvent.passageId];
     if (!target) return;
     target.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [reader, trail, selectedWorkId]);
 
-  async function submitAnnotation() {
+  // ── Handlers ──────────────────────────────────────────────────
+
+  function handlePassageMouseUp(passageId: string, resolved: SelectionState | null) {
+    if (!resolved) return;
+    setSelectedPassageId(passageId);
+    setSelection(resolved);
+    if (reader) {
+      void postTrailEvent({
+        workId: reader.work.id,
+        editionId: reader.id,
+        passageId,
+        eventType: "OPEN_PASSAGE",
+      }).then(() => refreshTrail());
+    }
+  }
+
+  async function handleSubmitAnnotation() {
     if (!reader || !selectedPassageId || !selection || !annotationBody.trim()) return;
     await fetch("/api/annotations", {
       method: "POST",
@@ -106,7 +127,7 @@ export function ReadingBoxApp() {
     await refreshAnnotations();
   }
 
-  async function closeAnnotation(id: string) {
+  async function handleCloseAnnotation(id: string) {
     await fetch("/api/annotations", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -116,7 +137,7 @@ export function ReadingBoxApp() {
     await refreshAnnotations();
   }
 
-  async function submitReply(annotationId: string) {
+  async function handleSubmitReply(annotationId: string) {
     const body = (replyDrafts[annotationId] ?? "").trim();
     if (!body || !reader) return;
     await fetch("/api/annotations", {
@@ -138,15 +159,15 @@ export function ReadingBoxApp() {
     await refreshAnnotations();
   }
 
-  async function submitGlobalReply(id: string) {
-    const body = (globalReplyDrafts[id] ?? "").trim();
-    if (!id || !body) return;
+  async function handleSubmitGlobalReply(annotationId: string) {
+    const body = (globalReplyDrafts[annotationId] ?? "").trim();
+    if (!body) return;
     await fetch("/api/annotations", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ parentId: id, userName: "demo-user", body }),
+      body: JSON.stringify({ parentId: annotationId, userName: "demo-user", body }),
     });
-    const annotation = globalAnnotations.find((a) => a.id === id);
+    const annotation = globalAnnotations.find((a) => a.id === annotationId);
     if (annotation) {
       await postTrailEvent({
         workId: annotation.workId,
@@ -155,29 +176,17 @@ export function ReadingBoxApp() {
         eventType: "REPLY",
       });
     }
-    setGlobalReplyDrafts((prev) => ({ ...prev, [id]: "" }));
+    setGlobalReplyDrafts((prev) => ({ ...prev, [annotationId]: "" }));
     await refreshAnnotations();
     if (reader) setReader(await fetchReader(reader.id));
   }
 
-  function handlePassageMouseUp(passageId: string, resolved: SelectionState | null) {
-    if (!resolved) return;
-    setSelectedPassageId(passageId);
-    setSelection(resolved);
-    if (reader) {
-      void postTrailEvent({
-        workId: reader.work.id,
-        editionId: reader.id,
-        passageId,
-        eventType: "OPEN_PASSAGE",
-      }).then(() => refreshTrail());
-    }
+  function handleSelectWork(workId: string) {
+    setSelectedWorkId(workId);
+    setTab("corpus");
   }
 
-  function handleNavigateFromTrail(workId: string) {
-    setTab("corpus");
-    setSelectedWorkId(workId);
-  }
+  // ── Render ─────────────────────────────────────────────────────
 
   return (
     <div className="app">
@@ -221,7 +230,6 @@ export function ReadingBoxApp() {
             ) : (
               <CorpusGraph
                 works={works}
-                graphEdges={graphEdges}
                 selectedWorkId={selectedWorkId}
                 onSelect={setSelectedWorkId}
               />
@@ -237,46 +245,48 @@ export function ReadingBoxApp() {
             passageRefs={passageRefs}
             onPassageMouseUp={handlePassageMouseUp}
             onAnnotationBodyChange={setAnnotationBody}
-            onSubmitAnnotation={submitAnnotation}
-            onCloseAnnotation={closeAnnotation}
-            onReplyDraftChange={(annotationId, v) =>
-              setReplyDrafts((prev) => ({ ...prev, [annotationId]: v }))
+            onSubmitAnnotation={handleSubmitAnnotation}
+            onCloseAnnotation={handleCloseAnnotation}
+            onReplyDraftChange={(id, val) =>
+              setReplyDrafts((prev) => ({ ...prev, [id]: val }))
             }
-            onSubmitReply={submitReply}
+            onSubmitReply={handleSubmitReply}
           />
 
           <ContextPanel
             works={works}
             selectedWorkId={selectedWorkId}
-            onSelect={setSelectedWorkId}
+            onSelect={handleSelectWork}
           />
         </main>
       )}
 
       {tab === "trail" && (
-        <TrailFeed trail={trail} onNavigate={handleNavigateFromTrail} />
+        <TrailFeed trail={trail} onNavigate={handleSelectWork} />
       )}
 
       {tab === "annotations" && (
         <AnnotationsFeed
           globalAnnotations={globalAnnotations}
           globalReplyDrafts={globalReplyDrafts}
-          onReplyDraftChange={(id, v) =>
-            setGlobalReplyDrafts((prev) => ({ ...prev, [id]: v }))
+          onReplyDraftChange={(id, val) =>
+            setGlobalReplyDrafts((prev) => ({ ...prev, [id]: val }))
           }
-          onSubmitGlobalReply={submitGlobalReply}
+          onSubmitGlobalReply={handleSubmitGlobalReply}
         />
       )}
     </div>
   );
 
+  // ── Private helpers ────────────────────────────────────────────
+
   async function refreshAnnotations() {
-    const json = (await fetch("/api/annotations").then((r) => r.json())) as AnnotationDto[];
+    const json = await fetch("/api/annotations").then((r) => r.json()) as AnnotationDto[];
     setGlobalAnnotations(json);
   }
 
   async function refreshTrail() {
-    const json = (await fetch("/api/trail?userId=demo-user").then((r) => r.json())) as TrailEventDto[];
+    const json = await fetch("/api/trail?userId=demo-user").then((r) => r.json()) as TrailEventDto[];
     setTrail(json);
   }
 
@@ -303,5 +313,5 @@ export function ReadingBoxApp() {
 }
 
 async function fetchReader(editionId: string): Promise<ReaderDto> {
-  return (await fetch(`/api/reader/${editionId}`).then((r) => r.json())) as ReaderDto;
+  return fetch(`/api/reader/${editionId}`).then((r) => r.json()) as Promise<ReaderDto>;
 }

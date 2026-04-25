@@ -5,8 +5,8 @@ import type { AnnotationDto } from "@/lib/types";
 interface Props {
   globalAnnotations: AnnotationDto[];
   globalReplyDrafts: Record<string, string>;
-  onReplyDraftChange: (id: string, v: string) => void;
-  onSubmitGlobalReply: (id: string) => Promise<void>;
+  onReplyDraftChange: (annotationId: string, value: string) => void;
+  onSubmitGlobalReply: (annotationId: string) => Promise<void>;
 }
 
 export function AnnotationsFeed({

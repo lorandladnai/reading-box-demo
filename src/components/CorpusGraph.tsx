@@ -12,24 +12,25 @@ type GraphLink = d3.SimulationLinkDatum<GraphNode> & {
 
 interface Props {
   works: WorkDto[];
-  graphEdges: Array<{ source: string; target: string }>;
   selectedWorkId: string | null;
   onSelect: (id: string) => void;
 }
 
-export function CorpusGraph({ works, graphEdges, selectedWorkId, onSelect }: Props) {
-  const graphRef = useRef<SVGSVGElement | null>(null);
-  const graphNodeSelectionRef =
+export function CorpusGraph({ works, selectedWorkId, onSelect }: Props) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const nodeSelRef =
     useRef<d3.Selection<SVGCircleElement, GraphNode, SVGGElement, unknown> | null>(null);
 
+  // Build graph on works change
   useEffect(() => {
-    if (!graphRef.current || works.length === 0) return;
-    const svg = d3.select(graphRef.current);
+    if (!svgRef.current || works.length === 0) return;
+
+    const svg = d3.select(svgRef.current);
     const width = 420;
     const height = 380;
     svg.selectAll("*").remove();
-    const root = svg.append("g");
 
+    const root = svg.append("g");
     svg.call(
       d3
         .zoom<SVGSVGElement, unknown>()
@@ -39,9 +40,11 @@ export function CorpusGraph({ works, graphEdges, selectedWorkId, onSelect }: Pro
 
     const nodes: GraphNode[] = works.map((w) => ({ ...w }));
     const nodeIds = new Set(nodes.map((n) => n.id));
-    const links: GraphLink[] = graphEdges
-      .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
-      .map((e) => ({ source: e.source, target: e.target }));
+    const links: GraphLink[] = works
+      .flatMap((w) =>
+        w.references.map((r) => ({ source: w.id, target: r.targetWorkId }))
+      )
+      .filter((e) => nodeIds.has(e.source as string) && nodeIds.has(e.target as string));
 
     const simulation = d3
       .forceSimulation(nodes)
@@ -62,7 +65,7 @@ export function CorpusGraph({ works, graphEdges, selectedWorkId, onSelect }: Pro
       .data(links)
       .enter()
       .append("line")
-      .attr("stroke", "#6b5e4a")
+      .attr("stroke", "#45413a")
       .attr("stroke-width", 1.2);
 
     const node = root
@@ -72,7 +75,7 @@ export function CorpusGraph({ works, graphEdges, selectedWorkId, onSelect }: Pro
       .enter()
       .append("circle")
       .attr("r", 9)
-      .attr("fill", "#a8987e")
+      .attr("fill", "#8c877f")
       .style("cursor", "pointer")
       .call(
         d3
@@ -94,7 +97,7 @@ export function CorpusGraph({ works, graphEdges, selectedWorkId, onSelect }: Pro
       )
       .on("click", (_, d) => onSelect(d.id));
 
-    graphNodeSelectionRef.current = node;
+    nodeSelRef.current = node;
 
     const labels = root
       .append("g")
@@ -103,7 +106,7 @@ export function CorpusGraph({ works, graphEdges, selectedWorkId, onSelect }: Pro
       .enter()
       .append("text")
       .attr("font-size", 10)
-      .attr("fill", "#6b5e4a")
+      .attr("fill", "#b9b5ad")
       .attr("text-anchor", "middle")
       .text((d) => d.title.slice(0, 18));
 
@@ -119,16 +122,19 @@ export function CorpusGraph({ works, graphEdges, selectedWorkId, onSelect }: Pro
 
     return () => {
       simulation.stop();
-      graphNodeSelectionRef.current = null;
+      nodeSelRef.current = null;
     };
-  }, [works, graphEdges]);
+  }, [works, onSelect]);
 
+  // Highlight selected node
   useEffect(() => {
-    if (!graphNodeSelectionRef.current) return;
-    graphNodeSelectionRef.current
+    if (!nodeSelRef.current) return;
+    nodeSelRef.current
       .attr("r", (d) => (selectedWorkId === d.id ? 12 : 9))
-      .attr("fill", (d) => (selectedWorkId === d.id ? "#7a4f1e" : "#a8987e"));
+      .attr("fill", (d) => (selectedWorkId === d.id ? "#b5935a" : "#8c877f"));
   }, [selectedWorkId]);
 
-  return <svg ref={graphRef} viewBox="0 0 420 380" className="graph" />;
+  return (
+    <svg ref={svgRef} viewBox="0 0 420 380" className="graph" />
+  );
 }

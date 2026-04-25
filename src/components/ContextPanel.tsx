@@ -14,27 +14,35 @@ export function ContextPanel({ works, selectedWorkId, onSelect }: Props) {
   return (
     <aside className="context-panel">
       <h3>Context Map</h3>
-      {selected ? (
+      {!selected ? (
+        <p>Select a work to view its local reference neighbourhood.</p>
+      ) : (
         <>
           <div className="context-group">
             <h4>References</h4>
-            {(selected.references ?? []).map((r) => (
-              <button key={r.targetWorkId} onClick={() => onSelect(r.targetWorkId)}>
-                {r.targetTitle}
-              </button>
-            ))}
+            {selected.references.length === 0 ? (
+              <p>None recorded.</p>
+            ) : (
+              selected.references.map((r) => (
+                <button key={r.targetWorkId} onClick={() => onSelect(r.targetWorkId)}>
+                  {r.targetTitle}
+                </button>
+              ))
+            )}
           </div>
           <div className="context-group">
             <h4>Cited by</h4>
-            {(selected.citedBy ?? []).map((r) => (
-              <button key={r.sourceWorkId} onClick={() => onSelect(r.sourceWorkId)}>
-                {r.sourceTitle}
-              </button>
-            ))}
+            {selected.citedBy.length === 0 ? (
+              <p>None recorded.</p>
+            ) : (
+              selected.citedBy.map((r) => (
+                <button key={r.sourceWorkId} onClick={() => onSelect(r.sourceWorkId)}>
+                  {r.sourceTitle}
+                </button>
+              ))
+            )}
           </div>
         </>
-      ) : (
-        <p>Select a work to view its local reference neighborhood.</p>
       )}
     </aside>
   );

@@ -14,13 +14,11 @@ export function TrailFeed({ trail, onNavigate }: Props) {
       {trail.length === 0 ? (
         <p className="passages-empty">No trail yet — open a work to begin.</p>
       ) : (
-        trail.map((event, idx) => (
+        trail.map((event) => (
           <button
-            key={idx}
+            key={event.id}
             className="trail-item"
-            onClick={() => {
-              if (event.workId) onNavigate(event.workId);
-            }}
+            onClick={() => { if (event.workId) onNavigate(event.workId); }}
           >
             {event.work?.title ?? "Unknown work"} · {event.eventType}
           </button>

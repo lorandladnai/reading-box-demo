@@ -1,4 +1,6 @@
-// ─── Work / Corpus ────────────────────────────────────────────
+// All DTOs for Reading Box. No Record<string, unknown> anywhere.
+// Shapes are derived directly from API route return values.
+
 export type WorkDto = {
   id: string;
   slug: string;
@@ -10,14 +12,7 @@ export type WorkDto = {
   citedBy: Array<{ sourceWorkId: string; sourceTitle: string; relation: string }>;
 };
 
-// ─── Reader / Passages ────────────────────────────────────────
-export type PassageDto = {
-  id: string;
-  passageIndex: number;
-  text: string;
-  sectionKey: string;
-};
-
+// Sub-types extracted from ReaderDto for component prop signatures
 export type ReplyDto = {
   id: string;
   body: string;
@@ -33,6 +28,13 @@ export type InlineAnnotationDto = {
   replies: ReplyDto[];
 };
 
+export type PassageDto = {
+  id: string;
+  passageIndex: number;
+  text: string;
+  sectionKey: string;
+};
+
 export type ReaderDto = {
   id: string;
   work: { id: string; title: string; authors: string[] };
@@ -40,33 +42,35 @@ export type ReaderDto = {
   annotations: InlineAnnotationDto[];
 };
 
-// ─── Selection ────────────────────────────────────────────────
-export type SelectionState = {
-  start: number;
-  end: number;
-  exact: string;
-};
-
-// ─── Global Annotations Feed ─────────────────────────────────
+// Derived from GET /api/annotations (includes replies + edition.work join)
 export type AnnotationDto = {
   id: string;
   body: string;
   state: "OPEN" | "CLOSED";
   passageId: string;
-  userName: string;
-  workId: string;
   editionId: string;
+  workId: string;
+  userName: string;
+  attention: number;
   replies: ReplyDto[];
 };
 
-// ─── Trail ───────────────────────────────────────────────────
+// Derived from GET /api/trail (includes work + passage joins)
 export type TrailEventDto = {
   id: string;
-  eventType: "OPEN_WORK" | "OPEN_PASSAGE" | "ANNOTATE" | "REPLY";
+  userId: string;
   workId: string;
   editionId: string;
   passageId: string | null;
-  userId: string;
+  eventType: "OPEN_WORK" | "OPEN_PASSAGE" | "ANNOTATE" | "REPLY";
+  visibility: "PUBLIC" | "PRIVATE";
   createdAt: string;
-  work: { title: string };
+  work: { id: string; title: string };
+};
+
+// Shared selection state used in PassageReader
+export type SelectionState = {
+  start: number;
+  end: number;
+  exact: string;
 };

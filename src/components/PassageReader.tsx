@@ -1,11 +1,7 @@
 "use client";
 
-import type {
-  ReaderDto,
-  InlineAnnotationDto,
-  PassageDto,
-  SelectionState,
-} from "@/lib/types";
+import type { ReaderDto, SelectionState, PassageDto } from "@/lib/types";
+import type { MutableRefObject } from "react";
 
 interface Props {
   reader: ReaderDto | null;
@@ -13,12 +9,15 @@ interface Props {
   selection: SelectionState | null;
   annotationBody: string;
   replyDrafts: Record<string, string>;
-  passageRefs: React.MutableRefObject<Record<string, HTMLParagraphElement | null>>;
-  onPassageMouseUp: (passageId: string, resolved: SelectionState | null) => void;
-  onAnnotationBodyChange: (v: string) => void;
+  passageRefs: MutableRefObject<Record<string, HTMLParagraphElement | null>>;
+  onPassageMouseUp: (
+    passageId: string,
+    resolved: SelectionState | null,
+  ) => void;
+  onAnnotationBodyChange: (value: string) => void;
   onSubmitAnnotation: () => Promise<void>;
   onCloseAnnotation: (id: string) => Promise<void>;
-  onReplyDraftChange: (annotationId: string, v: string) => void;
+  onReplyDraftChange: (annotationId: string, value: string) => void;
   onSubmitReply: (annotationId: string) => Promise<void>;
 }
 
@@ -63,8 +62,7 @@ export function PassageReader({
                 ref={(el) => { passageRefs.current[p.id] = el; }}
                 data-passage-id={p.id}
                 onMouseUp={(event) => {
-                  const el = event.currentTarget;
-                  const resolved = resolveSelectionOffsets(el);
+                  const resolved = resolveSelectionOffsets(event.currentTarget);
                   onPassageMouseUp(p.id, resolved);
                 }}
               >
@@ -93,8 +91,8 @@ export function PassageReader({
               )}
 
               {reader.annotations
-                .filter((a: InlineAnnotationDto) => a.passageId === p.id)
-                .map((a: InlineAnnotationDto) => (
+                .filter((a) => a.passageId === p.id)
+                .map((a) => (
                   <div key={a.id} className="annotation">
                     <div className="annotation-head">
                       <b>{a.userName}</b> · {a.state}
@@ -128,6 +126,8 @@ export function PassageReader({
   );
 }
 
+// ── Helpers (same logic as before, co-located with the reader) ──
+
 function resolveSelectionOffsets(
   container: HTMLElement,
 ): SelectionState | null {
@@ -136,9 +136,15 @@ function resolveSelectionOffsets(
   const range = sel.getRangeAt(0);
   const exact = range.toString().trim();
   if (!exact) return null;
-  if (!container.contains(range.startContainer) || !container.contains(range.endContainer))
-    return null;
-  const start = getTextOffsetWithTreeWalker(container, range.startContainer, range.startOffset);
+  if (
+    !container.contains(range.startContainer) ||
+    !container.contains(range.endContainer)
+  ) return null;
+  const start = getTextOffsetWithTreeWalker(
+    container,
+    range.startContainer,
+    range.startOffset,
+  );
   if (start < 0) return null;
   return { start, end: start + exact.length, exact };
 }

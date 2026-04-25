@@ -50,13 +50,13 @@ export function PassageReader({
       <div className="passages">
         {reader.passages.length === 0 ? (
           <p className="passages-empty">
-            No passages found for this edition. The import may have failed — re-run the seed script.
+            No passages found for this edition. Re-run the import script for this book.
           </p>
         ) : (
           reader.passages.map((p: PassageDto, idx: number) => (
             <article key={p.id}>
               {(idx === 0 || reader.passages[idx - 1]?.sectionKey !== p.sectionKey) && (
-                <h3 className="section-heading">{p.sectionKey}</h3>
+                <h3 className="section-heading">{p.sectionKey.replace("sec-", "Section ")}</h3>
               )}
               <p
                 ref={(el) => { passageRefs.current[p.id] = el; }}
@@ -80,7 +80,7 @@ export function PassageReader({
 
               {selectedPassageId === p.id && selection && (
                 <div className="compose-inline">
-                  <div className="compose-quote">&quot;{selection.exact}&quot;</div>
+                  <div className="compose-quote">&ldquo;{selection.exact}&rdquo;</div>
                   <textarea
                     value={annotationBody}
                     placeholder="Open a thread on this selected passage..."
@@ -95,15 +95,23 @@ export function PassageReader({
                 .map((a) => (
                   <div key={a.id} className="annotation">
                     <div className="annotation-head">
-                      <b>{a.userName}</b> · {a.state}
+                      <b>{a.userName}</b>
+                      <span className="annotation-state">{a.state === "OPEN" ? "open" : "closed"}</span>
                       {a.state === "OPEN" && (
-                        <button onClick={() => void onCloseAnnotation(a.id)}>close</button>
+                        <button
+                          className="annotation-close"
+                          aria-label="Close annotation thread"
+                          title="Close thread"
+                          onClick={() => void onCloseAnnotation(a.id)}
+                        >
+                          &#x2715;
+                        </button>
                       )}
                     </div>
-                    <div>{a.body}</div>
+                    <div className="annotation-body">{a.body}</div>
                     {a.replies.map((r) => (
                       <div className="reply" key={r.id}>
-                        {r.userName}: {r.body}
+                        <b>{r.userName}</b>: {r.body}
                       </div>
                     ))}
                     {a.state === "OPEN" && (
@@ -126,7 +134,7 @@ export function PassageReader({
   );
 }
 
-// ── Helpers (same logic as before, co-located with the reader) ──
+// ── Helpers ────────────────────────────────────────────────────
 
 function resolveSelectionOffsets(
   container: HTMLElement,

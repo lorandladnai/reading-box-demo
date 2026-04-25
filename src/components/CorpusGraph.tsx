@@ -119,10 +119,10 @@ export function CorpusGraph({ works, selectedWorkId, onSelect }: Props) {
 
     simulation.on("tick", () => {
       link
-        .attr("x1", (d) => ("x" in d.source ? (d.source as GraphNode).x ?? 0 : 0))
-        .attr("y1", (d) => ("y" in d.source ? (d.source as GraphNode).y ?? 0 : 0))
-        .attr("x2", (d) => ("x" in d.target ? (d.target as GraphNode).x ?? 0 : 0))
-        .attr("y2", (d) => ("y" in d.target ? (d.target as GraphNode).y ?? 0 : 0));
+        .attr("x1", (d) => ((d.source as unknown as GraphNode).x ?? 0))
+        .attr("y1", (d) => ((d.source as unknown as GraphNode).y ?? 0))
+        .attr("x2", (d) => ((d.target as unknown as GraphNode).x ?? 0))
+        .attr("y2", (d) => ((d.target as unknown as GraphNode).y ?? 0));
       node.attr("cx", (d) => d.x ?? 0).attr("cy", (d) => d.y ?? 0);
       labels.attr("x", (d) => d.x ?? 0).attr("y", (d) => (d.y ?? 0) + 22);
     });

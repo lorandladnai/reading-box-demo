@@ -25,8 +25,31 @@ export function stripBoilerplate(text: string): string {
   return text;
 }
 
-export function htmlToParagraphs(rawHtml: string): string[] {
+export function stripHtmlBoilerplate(rawHtml: string): string {
   const $ = cheerio.load(rawHtml);
+
+  // Remove Project Gutenberg header/footer sections
+  $(".pg-boilerplate, .pgheader, #pg-header, #pg-footer, #pg-end-separator").remove();
+
+  // Remove empty spacer divs (e.g. <div style="height: 6em">)
+  $("div").each((_, el) => {
+    const style = $(el).attr("style") ?? "";
+    if (/height\s*:/i.test(style) && $(el).text().trim() === "") {
+      $(el).remove();
+    }
+  });
+
+  // Remove <pre> elements that are just whitespace
+  $("pre").each((_, el) => {
+    if ($(el).text().trim() === "") $(el).remove();
+  });
+
+  return $.html();
+}
+
+export function htmlToParagraphs(rawHtml: string): string[] {
+  const cleaned = stripHtmlBoilerplate(rawHtml);
+  const $ = cheerio.load(cleaned);
   const paragraphs = $("p")
     .map((_, p) => normalizeWhitespace($(p).text()))
     .get()

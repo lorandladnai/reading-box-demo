@@ -2,13 +2,9 @@
  * Bulk importer — alchemical & hermetic texts from Project Gutenberg
  *
  * Run: npm run import:alchemy
- *
- * Each entry has been manually verified to exist on Gutendex.
- * Plain-text editions are preferred; HTML editions are used where plain text
- * is unavailable (the HTML boilerplate stripper handles them correctly).
  */
 import { PrismaClient } from "@prisma/client";
-import { importGutendexBook } from "../src/lib/ingest";
+import { importGutendexBook } from "../src/lib/ingest.ts";
 
 const prisma = new PrismaClient();
 

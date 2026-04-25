@@ -10,6 +10,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "import:gutenberg": "tsx scripts/import-gutenberg.ts",
+    "import:alchemy": "tsx scripts/import-alchemy.ts",
     "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {

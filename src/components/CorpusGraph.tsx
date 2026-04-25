@@ -5,10 +5,7 @@ import { useEffect, useRef } from "react";
 import type { WorkDto } from "@/lib/types";
 
 type GraphNode = d3.SimulationNodeDatum & WorkDto;
-type GraphLink = d3.SimulationLinkDatum<GraphNode> & {
-  source: string | GraphNode;
-  target: string | GraphNode;
-};
+type GraphLink = d3.SimulationLinkDatum<GraphNode>;
 
 interface Props {
   works: WorkDto[];
@@ -16,12 +13,21 @@ interface Props {
   onSelect: (id: string) => void;
 }
 
+/** After simulation resolves links, source/target become GraphNode objects. */
+function nodeX(endpoint: string | number | GraphNode): number {
+  if (typeof endpoint === "object" && "x" in endpoint) return endpoint.x ?? 0;
+  return 0;
+}
+function nodeY(endpoint: string | number | GraphNode): number {
+  if (typeof endpoint === "object" && "y" in endpoint) return endpoint.y ?? 0;
+  return 0;
+}
+
 export function CorpusGraph({ works, selectedWorkId, onSelect }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const nodeSelRef =
     useRef<d3.Selection<SVGCircleElement, GraphNode, SVGGElement, unknown> | null>(null);
 
-  // Build graph on works change
   useEffect(() => {
     if (!svgRef.current || works.length === 0) return;
 
@@ -112,10 +118,10 @@ export function CorpusGraph({ works, selectedWorkId, onSelect }: Props) {
 
     simulation.on("tick", () => {
       link
-        .attr("x1", (d) => ("x" in d.source ? (d.source as GraphNode).x ?? 0 : 0))
-        .attr("y1", (d) => ("y" in d.source ? (d.source as GraphNode).y ?? 0 : 0))
-        .attr("x2", (d) => ("x" in d.target ? (d.target as GraphNode).x ?? 0 : 0))
-        .attr("y2", (d) => ("y" in d.target ? (d.target as GraphNode).y ?? 0 : 0));
+        .attr("x1", (d) => nodeX(d.source))
+        .attr("y1", (d) => nodeY(d.source))
+        .attr("x2", (d) => nodeX(d.target))
+        .attr("y2", (d) => nodeY(d.target));
       node.attr("cx", (d) => d.x ?? 0).attr("cy", (d) => d.y ?? 0);
       labels.attr("x", (d) => d.x ?? 0).attr("y", (d) => (d.y ?? 0) + 22);
     });
@@ -126,7 +132,6 @@ export function CorpusGraph({ works, selectedWorkId, onSelect }: Props) {
     };
   }, [works, onSelect]);
 
-  // Highlight selected node
   useEffect(() => {
     if (!nodeSelRef.current) return;
     nodeSelRef.current
@@ -134,7 +139,5 @@ export function CorpusGraph({ works, selectedWorkId, onSelect }: Props) {
       .attr("fill", (d) => (selectedWorkId === d.id ? "#b5935a" : "#8c877f"));
   }, [selectedWorkId]);
 
-  return (
-    <svg ref={svgRef} viewBox="0 0 420 380" className="graph" />
-  );
+  return <svg ref={svgRef} viewBox="0 0 420 380" className="graph" />;
 }

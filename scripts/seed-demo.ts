@@ -3,31 +3,30 @@ import { importGutendexBook } from "../src/lib/ingest";
 
 const prisma = new PrismaClient();
 
-// Gutenberg IDs — Stoic / Hermetic / Neo-Platonic philosophy cluster
-// 2680  Marcus Aurelius — Meditations
-// 4363  Nietzsche      — Beyond Good and Evil
-// 4399  Epictetus      — Enchiridion
-// 1974  Plato          — The Republic
-// 1100  Dante          — The Divine Comedy (Inferno)
-// 3207  Spinoza        — Ethics
+// Gutenberg IDs — alchemical & hermetic corpus
+// 6485   Waite          — Collectanea Chemica
+// 35097  Redgrove       — Alchemy: Ancient and Modern
+// 14218  Pattison Muir  — The Story of Alchemy
+// 2300   Waite          — The Hermetic Museum Vol. 1
+// 2301   Waite          — The Hermetic Museum Vol. 2
+// 1653   Hartmann       — Theophrastus Paracelsus
 const BOOKS: { id: number; label: string }[] = [
-  { id: 2680, label: "Meditations" },
-  { id: 4363, label: "Beyond Good and Evil" },
-  { id: 4399, label: "Enchiridion" },
-  { id: 1974, label: "The Republic" },
-  { id: 1100, label: "Inferno" },
-  { id: 3207, label: "Ethics" },
+  { id: 6485,  label: "Collectanea Chemica" },
+  { id: 35097, label: "Alchemy: Ancient and Modern" },
+  { id: 14218, label: "The Story of Alchemy" },
+  { id: 2300,  label: "The Hermetic Museum Vol. 1" },
+  { id: 2301,  label: "The Hermetic Museum Vol. 2" },
+  { id: 1653,  label: "Theophrastus Paracelsus" },
 ];
 
 // [sourceIdx, targetIdx, relation]
 const REFERENCE_EDGES: [number, number, string][] = [
-  [2, 0, "influence"],   // Enchiridion → Meditations (Epictetus influenced Aurelius)
-  [2, 0, "commentary"],  // Enchiridion → Meditations (Stoic commentary tradition)
-  [1, 0, "response"],    // Beyond G&E → Meditations (Nietzsche vs Stoics)
-  [1, 3, "response"],    // Beyond G&E → Republic (Nietzsche critiques Plato)
-  [3, 5, "influence"],   // Republic → Ethics (Plato influenced Spinoza)
-  [5, 0, "influence"],   // Ethics → Meditations (Stoic parallels)
-  [4, 3, "allusion"],    // Inferno → Republic (Platonic cosmology)
+  [0, 3, "commentary"],   // Collectanea → Hermetic Museum Vol.1 (shared Waite tradition)
+  [0, 4, "commentary"],   // Collectanea → Hermetic Museum Vol.2
+  [1, 2, "influence"],    // Redgrove → Pattison Muir (historiographic lineage)
+  [5, 3, "allusion"],     // Paracelsus → Hermetic Museum Vol.1 (Paracelsian texts collected within)
+  [5, 0, "influence"],    // Paracelsus → Collectanea (Paracelsian corpus)
+  [3, 4, "commentary"],   // Vol.1 → Vol.2 (companion volumes)
 ];
 
 const SEED_ANNOTATIONS: {
@@ -39,37 +38,37 @@ const SEED_ANNOTATIONS: {
 }[] = [
   {
     bookIdx: 0,
-    passageIdx: 3,
+    passageIdx: 2,
     userName: "alice",
-    body: "Aurelius keeps returning to the idea that our judgements, not external events, cause suffering. This is the core Stoic move.",
+    body: "The transmutation metaphor here operates on two levels simultaneously — the physical laboratory process and the spiritual purification of the operator. Waite is insistent that the two cannot be separated.",
     replies: [
-      { userName: "bob", body: "Epictetus makes the same point almost word for word in the Enchiridion — clearly the direct source here." },
-      { userName: "alice", body: "Yes, and Nietzsche would say this is exactly the kind of life-denying stance he objects to." },
+      { userName: "bob", body: "The Hermetic Museum makes this even more explicit — the adept\'s interior state is said to affect the outcome of the work." },
+      { userName: "alice", body: "Which is why Paracelsus insists so heavily on the moral character of the physician-alchemist." },
     ],
-  },
-  {
-    bookIdx: 1,
-    passageIdx: 5,
-    userName: "bob",
-    body: "The 'will to power' passage here is often misread as political. It's really about self-overcoming.",
-    replies: [
-      { userName: "alice", body: "Right — and ironically Aurelius is doing something similar when he drills the exercises each morning." },
-    ],
-  },
-  {
-    bookIdx: 2,
-    passageIdx: 1,
-    userName: "alice",
-    body: "The opening distinction between what is 'up to us' and what is not is one of the most load-bearing ideas in the whole corpus.",
-    replies: [],
   },
   {
     bookIdx: 3,
-    passageIdx: 8,
+    passageIdx: 4,
     userName: "bob",
-    body: "The allegory of the cave is so compressed here. Every line carries enormous weight.",
+    body: "The Emerald Tablet citations throughout this volume suggest the editors conceived of the Museum as a practical commentary on Hermetic axioms rather than mere anthology.",
     replies: [
-      { userName: "alice", body: "Spinoza picks this metaphor back up in Ethics — the transition from imagination to reason mirrors the ascent from the cave." },
+      { userName: "alice", body: "Yes — each treatise is almost positioned as an elaboration of \'as above, so below\'." },
+    ],
+  },
+  {
+    bookIdx: 5,
+    passageIdx: 1,
+    userName: "alice",
+    body: "Hartmann\'s framing of Paracelsus is sympathetic to the point of hagiography, but the primary source passages he quotes are genuinely extraordinary.",
+    replies: [],
+  },
+  {
+    bookIdx: 1,
+    passageIdx: 6,
+    userName: "bob",
+    body: "Redgrove\'s account of the Arab transmission of Alexandrian alchemy is the clearest short history I have found anywhere. He traces the Jabir corpus directly to the Hermetic tradition.",
+    replies: [
+      { userName: "alice", body: "Pattison Muir covers the same ground but is more skeptical about the Arab claims — worth reading them side by side." },
     ],
   },
 ];
@@ -83,7 +82,7 @@ async function upsertReference(sourceWorkId: string, targetWorkId: string, relat
 }
 
 async function run() {
-  console.log("Importing books...");
+  console.log("Importing alchemical corpus...");
   const workIds: string[] = [];
   for (const book of BOOKS) {
     console.log(`  importing ${book.label} (id ${book.id})...`);
@@ -115,11 +114,9 @@ async function run() {
     });
     const passage = passages[ann.passageIdx];
     if (!passage) continue;
-    // Use a safe selection: first 60 chars of passage text
     const startOffset = 0;
     const endOffset = Math.min(60, passage.text.length);
     const exact = passage.text.slice(startOffset, endOffset);
-    const prefix = "";
     const suffix = passage.text.slice(endOffset, endOffset + 32);
     const existing = await prisma.annotation.findFirst({
       where: { passageId: passage.id, userName: ann.userName, parentId: null },
@@ -134,7 +131,7 @@ async function run() {
           passageId: passage.id,
           userName: ann.userName,
           exact,
-          prefix,
+          prefix: "",
           suffix,
           startOffset,
           endOffset,
@@ -154,7 +151,7 @@ async function run() {
             passageId: passage.id,
             userName: reply.userName,
             exact,
-            prefix,
+            prefix: "",
             suffix,
             startOffset,
             endOffset,
@@ -172,10 +169,5 @@ async function run() {
 }
 
 run()
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+  .catch((error) => { console.error(error); process.exit(1); })
+  .finally(async () => { await prisma.$disconnect(); });
